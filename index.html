@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARCADE NEXUS · game hub</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: radial-gradient(circle at 20% 20%, #0c1122, #03060c);
+      font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem 1.5rem 2rem;
+      color: #eef4ff;
+    }
+
+    /* header */
+    .hub-header {
+      width: 100%;
+      max-width: 1360px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid rgba(100, 150, 255, 0.2);
+    }
+    .hub-header h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, #b7d0ff, #6ea8fe, #3d7eff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 18px rgba(60, 130, 255, 0.4);
+    }
+    .hub-header .badge {
+      background: rgba(20, 40, 80, 0.7);
+      border: 1px solid #2a4b8a;
+      padding: 0.4rem 1.2rem;
+      border-radius: 40px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      backdrop-filter: blur(6px);
+      color: #aac8ff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    /* search bar */
+    .search-wrapper {
+      flex: 1 1 260px;
+      display: flex;
+      justify-content: center;
+      margin: 0.6rem 1rem;
+      min-width: 220px;
+    }
+    .search-input {
+      width: 100%;
+      max-width: 360px;
+      padding: 0.6rem 1.2rem;
+      border-radius: 40px;
+      border: 1px solid #2a4b8a;
+      background: rgba(12, 20, 38, 0.8);
+      backdrop-filter: blur(6px);
+      color: #eef4ff;
+      font-size: 0.9rem;
+      font-weight: 400;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    .search-input::placeholder {
+      color: #6f8bc0;
+      font-weight: 400;
+      letter-spacing: 0.3px;
+    }
+    .search-input:focus {
+      border-color: #3f7eff;
+      background: rgba(20, 35, 65, 0.9);
+      box-shadow: 0 0 0 3px rgba(63, 126, 255, 0.2), 0 4px 12px rgba(0, 0, 0, 0.6);
+    }
+
+    /* game grid */
+    .game-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 2rem;
+      width: 100%;
+      max-width: 1400px;
+      margin-bottom: 2rem;
+    }
+
+    /* game card */
+    .game-card {
+      background: rgba(12, 20, 38, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(70, 130, 255, 0.3);
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(100, 170, 255, 0.15) inset;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s ease, border-color 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+      position: relative;
+    }
+    .game-card:hover {
+      border-color: #3f7eff;
+      transform: translateY(-6px);
+      box-shadow: 0 30px 50px rgba(0, 80, 255, 0.25), 0 0 0 1px rgba(100, 170, 255, 0.3) inset;
+    }
+
+    /* cover area */
+    .card-cover {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      background: linear-gradient(145deg, #0f1a2e, #060b16);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* big emoji / icon as cover art */
+    .card-cover .cover-icon {
+      font-size: 5rem;
+      filter: drop-shadow(0 0 20px rgba(80, 150, 255, 0.6));
+      transition: transform 0.3s ease;
+      line-height: 1;
+    }
+    .game-card:hover .card-cover .cover-icon {
+      transform: scale(1.12);
+    }
+
+    /* subtle gradient overlay on cover */
+    .card-cover::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(6, 12, 24, 0.9) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    /* card body */
+    .card-body {
+      padding: 1.1rem 1.3rem 1.3rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+      flex: 1;
+    }
+    .card-body h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #d6e5ff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .card-body h2 span {
+      font-size: 1.2rem;
+    }
+    .card-body p {
+      font-size: 0.8rem;
+      color: #8fa8d0;
+      line-height: 1.4;
+      flex: 1;
+    }
+
+    /* card action row */
+    .card-actions {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 0.3rem;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      padding: 0.5rem 1rem;
+      border-radius: 40px;
+      font-weight: 600;
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1px solid #3b5c9e;
+      background: #1e2c4a;
+      color: #d0e2ff;
+      box-shadow: 0 3px 0 #0b1120;
+      text-decoration: none;
+      letter-spacing: 0.3px;
+    }
+    .btn:hover {
+      background: #2f4680;
+      color: #fff;
+      border-color: #6d9eff;
+      transform: translateY(-1px);
+      box-shadow: 0 5px 0 #0b1120;
+    }
+    .btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 #0b1120;
+    }
+    .btn.play-btn {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      border-color: #60a5fa;
+      flex: 1;
+    }
+    .btn.play-btn:hover {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+    }
+    .btn.fs-btn {
+      background: #1e3a5e;
+      border-color: #3e7bcb;
+      flex: 0 0 auto;
+    }
+    .btn.fs-btn:hover {
+      background: #2764a8;
+    }
+
+    /* footer */
+    .hub-footer {
+      width: 100%;
+      max-width: 1400px;
+      text-align: center;
+      padding: 1.2rem 0 0.5rem;
+      font-size: 0.8rem;
+      color: #6f8bc0;
+      border-top: 1px solid rgba(70, 130, 255, 0.2);
+      margin-top: 1rem;
+    }
+
+    /* toast */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(20, 40, 80, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid #3e7bcb;
+      padding: 0.7rem 1.8rem;
+      border-radius: 40px;
+      font-size: 0.85rem;
+      color: #cfe0ff;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+      pointer-events: none;
+      z-index: 100;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* responsive */
+    @media (max-width: 700px) {
+      .game-grid {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.3rem;
+      }
+      .hub-header h1 {
+        font-size: 1.5rem;
+      }
+      .card-body h2 {
+        font-size: 1rem;
+      }
+      .hub-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.8rem;
+      }
+      .search-wrapper {
+        margin: 0.2rem 0;
+        justify-content: stretch;
+      }
+      .search-input {
+        max-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- header -->
+  <div class="hub-header">
+    <h1>⚡ ARCADE NEXUS</h1>
+    <div class="search-wrapper">
+      <input type="text" id="gameSearch" class="search-input" placeholder="🔍 Search games..." autocomplete="off">
+    </div>
+    <div class="badge">10 GAMES · CLICK TO PLAY</div>
+  </div>
+
+  <!-- game grid -->
+  <div class="game-grid" id="gameGrid">
+
+    <!-- GAME 1: SOFLIO WHEELIE -->
+    <div class="game-card" data-game="games/deepseek_html_20261124_6094c4.html" data-title="SOFLIO WHEELIE">
+      <div class="card-cover">
+        <div class="cover-icon">🚲</div>
+      </div>
+      <div class="card-body">
+        <h2><span>🚲</span> SOFLIO WHEELIE</h2>
+        <p>20 rides · wheelie physics · tricks & combos</p>
+        <div class="card-actions">
+          <button class="btn play-btn" data-action="play">▶ PLAY NOW</button>
+          <button class="btn fs-btn" data-action="fullscreen">⛶ FULLSCREEN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GAME 2: FORMITE -->
+    <div class="game-card" data-game="games/formite_original_2d_battle_royale_1v1.html" data-title="FORMITE">
+      <div class="card-cover">
+        <div class="cover-icon">🎮</div>
+      </div>
+      <div class="card-body">
+        <h2><span>🎮</span> FORMITE · 2D BATTLE ROYALE</h2>
+        <p>30-player BR · 1v1 arena · PeerJS multiplayer</p>
+        <div class="card-actions">
+          <button class="btn play-btn" data-action="play">▶ PLAY NOW</button>
+          <button class="btn fs-btn" data-action="fullscreen">⛶ FULLSCREEN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- turbo pitch -->
+    <div class="game-card" data-game="games/turbo-pitch.html" data-title="Turbo pitch">
+      <div class="card-cover">
+        <div class="cover-icon">🚗</div>
+      </div>
+      <div class="card-body">
+        <h2><span>🚗</span> Turbo pitch</h2>
+        <p>Classic arcade action · retro vibes</p>
+        <div class="card-actions">
+          <button class="btn play-btn" data-action="play">▶ PLAY NOW</button>
+          <button class="btn fs-btn" data-action="fullscreen">⛶ FULLSCREEN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- rocket league -->
+    <div class="game-card" data-game="games/rocket_arena_3d_p2p_ai.html" data-title="rocket league">
+      <div class="card-cover">
+        <div class="cover-icon">🏎️</div>
+      </div>
+      <div class="card-body">
+        <h2><span>🏎️</span> Rocket league</h2>
+        <p>Precision aiming · competitive challenge</p>
+        <div class="card-actions">
+          <button class="btn play-btn" data-action="play">▶ PLAY NOW</button>
+          <button class="btn fs-btn" data-action="fullscreen">⛶ FULLSCREEN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Amongus -->
+    <div class="game-card" data-game="games/hollow-orbit.html" data-title="amongus">
+      <div class="card-cover">
+        <div class="cover-icon">ඞ</div>
+      </div>
+      <div class="card-body">
+        <h2><span>ඞ</span>rip off amongus</h2>
+        <p>Championship arena · climb the ranks</p>
+        <div class="card-actions">
+          <button class="btn play-btn" data-action="play">▶ PLAY NOW</button>
+          <button class="btn fs-btn" data-action="fullscreen">⛶ FULLSCREEN</button>
+        </div>
+      </div>
+    </div>
+    <!-- Amongus -->
+    <div class="game-card" data-game="games/hollow-orbit.html" data-title="amongus">
+      <div class="card-cover">
+        <div class="cover-icon">ඞ</div>
+      </div>
+      <div class="card-body">
+        <h2><span>ඞ</span>rip off amongus</h2>
+        <p>Championship arena · climb the ranks</p>
+        <div class="card-actions">
+          <button class="btn play-btn" data-action="play">▶ PLAY NOW</button>
+          <button class="btn fs-btn" data-action="fullscreen">⛶ FULLSCREEN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW GAME: SUPER SPEED STARS -->
+    <div class="game-card" data-game="games/SUPER%20SPEED%20STARS(1).html" data-title="Super Speed Stars">
+      <div class="card-cover">
+        <div class="cover-icon">🏃</div>
+      </div>
+      <div class="card-body">
+        <h2><span>🏃</span> Super Speed Stars</h2>
+        <p>Track & field · customise runner · rhythm sprinting</p>
+        <div class="card-actions">
+          <button class="btn play-btn" data-action="play">▶ PLAY NOW</button>
+          <button class="btn fs-btn" data-action="fullscreen">⛶ FULLSCREEN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW GAME: BRAWL ARENA -->
+    <div class="game-card" data-game="games/brawl-arena.html" data-title="Brawl Arena">
+      <div class="card-cover">
+        <div class="cover-icon">🥊</div>
+      </div>
+      <div class="card-body">
+        <h2><span>🥊</span> Brawl Arena</h2>
+        <p>3v3 top-down brawler · bots & online multiplayer</p>
+        <div class="card-actions">
+          <button class="btn play-btn" data-action="play">▶ PLAY NOW</button>
+          <button class="btn fs-btn" data-action="fullscreen">⛶ FULLSCREEN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW GAME: ELEMENTAL -->
+    <div class="game-card" data-game="games/elemental-crafting-game.html" data-title="Elemental">
+      <div class="card-cover">
+        <div class="cover-icon">✨</div>
+      </div>
+      <div class="card-body">
+        <h2><span>✨</span> Elemental</h2>
+        <p>Crafting game · combine elements · discover new ones</p>
+        <div class="card-actions">
+          <button class="btn play-btn" data-action="play">▶ PLAY NOW</button>
+          <button class="btn fs-btn" data-action="fullscreen">⛶ FULLSCREEN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW GAME: SPIRE SIEGE -->
+    <div class="game-card" data-game="games/Spire%20Siege.html" data-title="Spire Siege">
+      <div class="card-cover">
+        <div class="cover-icon">🏰</div>
+      </div>
+      <div class="card-body">
+        <h2><span>🏰</span> Spire Siege</h2>
+        <p>Card battler · deck building · castle defence</p>
+        <div class="card-actions">
+          <button class="btn play-btn" data-action="play">▶ PLAY NOW</button>
+          <button class="btn fs-btn" data-action="fullscreen">⛶ FULLSCREEN</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- footer -->
+  <div class="hub-footer">
+    ARCADE NEXUS · 10 games loaded from /games folder · click PLAY NOW to launch
+  </div>
+
+  <!-- toast -->
+  <div class="toast" id="toast">Opening game…</div>
+
+  <script>
+    (function() {
+      const toast = document.getElementById('toast');
+      let toastTimer = null;
+
+      function showToast(msg) {
+        toast.textContent = msg;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          toast.classList.remove('show');
+        }, 1800);
+      }
+
+      // Open a game in a new tab
+      function openGame(url, title, fullscreenHint) {
+        if (!url || url.endsWith('game3.html') || url.endsWith('game4.html') || url.endsWith('game5.html')) {
+          showToast('⚠️ "' + title + '" is not available yet.');
+          return;
+        }
+        showToast('🚀 Opening ' + title + '…');
+        const win = window.open(url, '_blank');
+        if (!win) {
+          showToast('⚠️ Popup blocked — allow popups for this site.');
+          return;
+        }
+        if (fullscreenHint && win) {
+          win.focus();
+        }
+      }
+
+      // Attach click handlers to all game cards
+      document.querySelectorAll('.game-card').forEach(card => {
+        const url = card.getAttribute('data-game');
+        const title = card.getAttribute('data-title');
+
+        const playBtn = card.querySelector('[data-action="play"]');
+        if (playBtn) {
+          playBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openGame(url, title, false);
+          });
+        }
+
+        const fsBtn = card.querySelector('[data-action="fullscreen"]');
+        if (fsBtn) {
+          fsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openGame(url, title, true);
+          });
+        }
+
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('button')) return;
+          openGame(url, title, false);
+        });
+      });
+
+      // ── Search functionality ──
+      const searchInput = document.getElementById('gameSearch');
+      const gameCards = document.querySelectorAll('.game-card');
+
+      function filterGames() {
+        const query = searchInput.value.trim().toLowerCase();
+        gameCards.forEach(card => {
+          const title = card.getAttribute('data-title') || '';
+          const description = card.querySelector('.card-body p')?.textContent || '';
+          const matches = title.toLowerCase().includes(query) || description.toLowerCase().includes(query);
+          card.style.display = matches ? '' : 'none';
+        });
+      }
+
+      searchInput.addEventListener('input', filterGames);
+    })();
+  </script>
+</body>
+</html>

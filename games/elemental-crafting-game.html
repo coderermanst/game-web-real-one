@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>Elemental — A Crafting Game</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#111c2e;--line:#26364d;--muted:#9fb0c7;--text:#f4f7fb;--accent:#7dd3fc}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#1b2a42 0,#0b1220 55%);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 22px;border-bottom:1px solid #26364d;background:#0b1220cc;position:sticky;top:0;z-index:5;backdrop-filter:blur(12px)}
+h1{font-size:20px;margin:0;letter-spacing:.4px}.sub{color:var(--muted);font-size:12px}.layout{display:grid;grid-template-columns:260px 1fr;gap:16px;padding:16px;max-width:1500px;margin:auto}
+.panel,.workbench{background:#111c2e;border:1px solid var(--line);border-radius:16px;min-width:0;box-shadow:0 12px 35px #0002}
+.panel{padding:14px;height:calc(100vh - 110px);min-height:500px;display:flex;flex-direction:column}
+.panel h2{font-size:14px;margin:0 0 10px}.search{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:#0b1423;color:var(--text);outline:none}
+.inventory{overflow:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;align-content:start}
+.item{border:1px solid #33465f;background:#1a2940;border-radius:10px;padding:9px 7px;text-align:center;cursor:grab;user-select:none;transition:.15s;min-width:0}
+.item:hover{border-color:var(--accent);transform:translateY(-1px)}.emoji{font-size:23px;display:block}.iname{font-size:12px;overflow-wrap:anywhere}
+.workbench{min-height:calc(100vh - 110px);position:relative;overflow:hidden;background-color:#0d1727;background-image:radial-gradient(#33445b 1px,transparent 1px);background-size:24px 24px}
+.toolbar{display:flex;align-items:center;gap:8px;padding:12px;border-bottom:1px solid var(--line);background:#111c2e}
+button{border:1px solid var(--line);background:#1b2b42;color:var(--text);padding:8px 11px;border-radius:9px;cursor:pointer;font-weight:600}button:hover{border-color:var(--accent)}button.primary{background:#075985;border-color:#0284c7}
+.hint{color:var(--muted);font-size:12px;margin-left:auto}
+.canvas{position:relative;min-height:650px;height:calc(100vh - 170px);overflow:auto}
+.tile{position:absolute;min-width:112px;max-width:150px;padding:10px 12px;border-radius:12px;border:1px solid #45617e;background:#1a2c44;box-shadow:0 8px 18px #0005;text-align:center;cursor:grab;user-select:none;touch-action:none}
+.tile .emoji{font-size:25px}.tile .iname{font-size:13px;font-weight:650}.tile.selected{outline:2px solid var(--accent);box-shadow:0 0 0 5px #7dd3fc22}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#e0f2fe;color:#082f49;padding:10px 16px;border-radius:999px;font-weight:700;box-shadow:0 8px 30px #0006;opacity:0;pointer-events:none;transition:.2s;z-index:10}.toast.show{opacity:1}
+.stats{color:var(--muted);font-size:12px}.empty{grid-column:1/-1;color:var(--muted);font-size:12px;padding:12px;text-align:center}
+@media(max-width:760px){.layout{grid-template-columns:1fr;padding:10px}.panel{height:260px;min-height:0}.inventory{grid-template-columns:repeat(4,minmax(0,1fr))}.workbench{min-height:500px}.canvas{height:65vh;min-height:500px}header{padding:14px}.hint{display:none}}
+</style>
+</head>
+<body>
+<header><div><h1>✨ ELEMENTAL</h1><div class="sub">A tiny world of endless combinations</div></div><div class="stats" id="stats">4 discoveries</div></header>
+<main class="layout">
+<aside class="panel"><h2>YOUR DISCOVERIES</h2><input class="search" id="search" placeholder="Search elements…" aria-label="Search discoveries"><div class="inventory" id="inventory"></div></aside>
+<section class="workbench"><div class="toolbar"><button class="primary" id="addBasics">＋ Add basics</button><button id="clearBoard">Clear board</button><button id="reset">Reset game</button><span class="hint">Drag elements together to combine · Tap two on mobile</span></div><div class="canvas" id="canvas"></div></section>
+</main>
+<div class="toast" id="toast" role="status"></div>
+<script>
+(() => {
+const initial = [
+ {name:"Water",emoji:"💧"},{name:"Fire",emoji:"🔥"},{name:"Wind",emoji:"💨"},{name:"Earth",emoji:"🌍"}
+];
+const recipes = {
+ "Earth|Water":["Plant","🌱"],"Fire|Water":["Steam","♨️"],"Fire|Wind":["Smoke","💨"],
+ "Earth|Wind":["Dust","🌫️"],"Fire|Earth":["Lava","🌋"],"Water|Wind":["Cloud","☁️"],
+ "Cloud|Water":["Rain","🌧️"],"Plant|Water":["Flower","🌸"],"Plant|Earth":["Tree","🌳"],
+ "Fire|Plant":["Ash","🪵"],"Lava|Water":["Stone","🪨"],"Wind|Cloud":["Storm","⛈️"],
+ "Earth|Plant":["Forest","🌲"],"Fire|Stone":["Metal","⚙️"],"Metal|Water":["Rust","🧡"],
+ "Cloud|Earth":["Mountain","⛰️"],"Rain|Earth":["Mud","🟤"],"Fire|Sand":["Glass","🪟"],
+ "Earth|Fire":["Lava","🌋"],"Flower|Water":["Garden","🪴"],"Tree|Wind":["Leaf","🍃"],
+ "Plant|Sun":["Sunflower","🌻"],"Fire|Snow":["Water","💧"],"Water|Wind":["Cloud","☁️"],
+ "Ocean|Earth":["Island","🏝️"],"Water|Water":["Ocean","🌊"],"Sun|Water":["Rainbow","🌈"],
+ "Moon|Ocean":["Tide","🌙"],"Human|Earth":["Farmer","🧑‍🌾"],"Human|Fire":["Cook","🧑‍🍳"],
+ "Metal|Stone":["Tool","🔨"],"Cloud|Sun":["Sky","🌤️"],"Air|Water":["Cloud","☁️"]
+};
+const key=(a,b)=>[a,b].sort((x,y)=>x.localeCompare(y)).join("|");
+const defaults = initial.map(x=>x.name);
+let discovered = new Map(initial.map(x=>[x.name,x.emoji]));
+let board=[], selected=null, drag=null;
+const $=id=>document.getElementById(id), canvas=$("canvas"), inventory=$("inventory");
+const saved=localStorage.getItem("elemental-save");
+if(saved){try{const data=JSON.parse(saved);discovered=new Map(data.discovered);board=data.board||[];}catch{}}
+function save(){localStorage.setItem("elemental-save",JSON.stringify({discovered:[...discovered],board}));}
+function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove("show"),1600)}
+function renderInventory(){
+ const q=$("search").value.toLowerCase();inventory.innerHTML="";
+ [...discovered].filter(([n])=>n.toLowerCase().includes(q)).sort(([a],[b])=>a.localeCompare(b)).forEach(([name,emoji])=>{
+  const el=document.createElement("div");el.className="item";el.draggable=true;el.innerHTML=`<span class="emoji">${emoji}</span><span class="iname">${name}</span>`;
+  el.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",name);});
+  el.addEventListener("click",()=>addToBoard(name));inventory.append(el);
+ });
+ $("stats").textContent=`${discovered.size} ${discovered.size===1?"discovery":"discoveries"}`;
+ if(!inventory.children.length)inventory.innerHTML='<div class="empty">No matching elements yet.</div>';
+}
+function addToBoard(name,x=80+Math.random()*260,y=70+Math.random()*260){
+ board.push({name,x,y});save();renderBoard();
+}
+function renderBoard(){
+ canvas.innerHTML="";
+ board.forEach((obj,i)=>{
+  const el=document.createElement("div");el.className="tile"+(selected===i?" selected":"");
+  el.style.left=obj.x+"px";el.style.top=obj.y+"px";
+  el.innerHTML=`<span class="emoji">${discovered.get(obj.name)||"✨"}</span><span class="iname">${obj.name}</span>`;
+  el.addEventListener("pointerdown",e=>startDrag(e,i,el));
+  el.addEventListener("click",e=>{if(drag?.moved)return;if(selected===null){selected=i;renderBoard()}else if(selected===i){selected=null;renderBoard()}else{combine(selected,i)}});
+  canvas.append(el);
+ });
+}
+function startDrag(e,i,el){
+ if(e.target.closest("button"))return;
+ const rect=canvas.getBoundingClientRect();const startX=e.clientX,startY=e.clientY;
+ const offsetX=e.clientX-el.getBoundingClientRect().left,offsetY=e.clientY-el.getBoundingClientRect().top;
+ drag={i,moved:false};el.setPointerCapture(e.pointerId);
+ const move=ev=>{if(Math.abs(ev.clientX-startX)+Math.abs(ev.clientY-startY)>5)drag.moved=true;if(drag.moved){const r=canvas.getBoundingClientRect();board[i].x=Math.max(0,ev.clientX-r.left-offsetX+canvas.scrollLeft);board[i].y=Math.max(0,ev.clientY-r.top-offsetY+canvas.scrollTop);el.style.left=board[i].x+"px";el.style.top=board[i].y+"px";}};
+ const up=ev=>{el.removeEventListener("pointermove",move);el.removeEventListener("pointerup",up);if(drag?.moved){const target=[...canvas.children].find((node,j)=>j!==i&&overlap(el,node));const j=target?[...canvas.children].indexOf(target):-1;if(j>=0)combine(i,j);else save();}drag=null;};
+ el.addEventListener("pointermove",move);el.addEventListener("pointerup",up);
+}
+function overlap(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();return x.left<y.right&&x.right>y.left&&x.top<y.bottom&&x.bottom>y.top}
+function combine(i,j){
+ if(i===j)return;const a=board[i].name,b=board[j].name;const recipe=recipes[key(a,b)];
+ let result,emoji;
+ if(recipe){[result,emoji]=recipe;}
+ else {
+  // Procedural fallback keeps experimentation open while clearly marking a novel discovery.
+  const prefixes=["Tiny","Ancient","Bright","Wild","Cosmic","Hidden","Crystal","Dream"];
+  const suffixes=["Wonder","World","Spark","Creature","Realm","Matter","Machine","Bloom"];
+  const seed=(a+"|"+b).split("").reduce((n,c)=>n+c.charCodeAt(0),0);
+  result=prefixes[seed%prefixes.length]+" "+suffixes[Math.floor(seed/7)%suffixes.length];
+  if(result===a||result===b)result="New "+(a.length>b.length?a:b);
+  emoji=["✨","🔮","🧩","🌟","🪐","🦋"][seed%6];
+ }
+ if(!discovered.has(result)){discovered.set(result,emoji);toast(`New discovery: ${emoji} ${result}!`);}else toast(`${a} + ${b} = ${result}`);
+ const x=(board[i].x+board[j].x)/2,y=(board[i].y+board[j].y)/2;
+ board=board.filter((_,k)=>k!==i&&k!==j);board.push({name:result,x,y});selected=null;save();renderInventory();renderBoard();
+}
+$("search").addEventListener("input",renderInventory);
+$("addBasics").onclick=()=>initial.forEach(x=>addToBoard(x.name,50+Math.random()*300,50+Math.random()*300));
+$("clearBoard").onclick=()=>{board=[];selected=null;save();renderBoard()};
+$("reset").onclick=()=>{if(confirm("Reset all discoveries and start over?")){discovered=new Map(initial.map(x=>[x.name,x.emoji]));board=[];selected=null;save();renderInventory();renderBoard();}};
+canvas.addEventListener("dragover",e=>e.preventDefault());
+canvas.addEventListener("drop",e=>{e.preventDefault();const name=e.dataTransfer.getData("text/plain");if(!discovered.has(name))return;const r=canvas.getBoundingClientRect();addToBoard(name,e.clientX-r.left+canvas.scrollLeft-50,e.clientY-r.top+canvas.scrollTop-30);});
+renderInventory();renderBoard();
+})();
+</script>
+</body>
+</html>

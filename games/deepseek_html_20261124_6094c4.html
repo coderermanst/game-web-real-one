@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SOFLIO WHEELIE — 20 RIDES</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;user-select:none;}
+  body{
+    background:radial-gradient(circle at 50% 20%, #1a2138 0%, #070a12 100%);
+    min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;
+    font-family:'Segoe UI',system-ui,sans-serif;gap:14px;padding:20px;
+  }
+  canvas{
+    border-radius:24px;
+    box-shadow:0 30px 80px rgba(0,0,0,.9), 0 0 0 2px #2c3a5c, inset 0 0 60px rgba(0,0,0,.5);
+    background:#0d1220;
+  }
+  .hud{
+    width:900px;display:flex;justify-content:space-between;align-items:center;
+    color:#dfe9ff;font-weight:600;letter-spacing:.5px;
+  }
+  .badge{
+    background:#161e30;border:1px solid #33456b;padding:8px 20px;border-radius:30px;
+    box-shadow:0 4px 0 #0a0e18;font-size:15px;
+  }
+  .badge b{color:#8fb4ff;}
+  .controls{display:flex;gap:22px;font-size:13px;color:#8fa3c8;}
+  .controls kbd{
+    background:#222e46;border:1px solid #4a5f8a;border-radius:8px;padding:3px 9px;
+    color:#cfe0ff;font-weight:700;box-shadow:0 2px 0 #0a0e18;
+  }
+  .meterwrap{display:flex;align-items:center;gap:10px;font-size:13px;color:#8fa3c8;}
+  .meter{width:150px;height:10px;background:#141b2b;border-radius:10px;overflow:hidden;
+    box-shadow:inset 0 2px 6px #000;position:relative;}
+  .meterfill{height:100%;width:0%;border-radius:10px;
+    background:linear-gradient(90deg,#3fd66b,#ffd166,#ff8a3c);
+    box-shadow:0 0 14px #ffb547;transition:width .03s;}
+  .meterfill.danger{background:linear-gradient(90deg,#ff8a3c,#ff3c3c);box-shadow:0 0 18px #ff3c3c;}
+  .score{
+    background:#1a2338;border:1px solid #3d5585;padding:6px 26px;border-radius:30px;
+    font-size:20px;font-weight:800;color:#ffe6a8;box-shadow:0 4px 0 #0a0e18;
+  }
+  .msg{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    font-size:38px;font-weight:900;color:#fff;text-shadow:0 0 30px #ff3c3c,0 4px 0 #000;
+    pointer-events:none;opacity:0;transition:opacity .1s;letter-spacing:4px;
+  }
+  .msg.show{opacity:1;}
+</style>
+</head>
+<body>
+<canvas id="c" width="900" height="500"></canvas>
+<div class="hud">
+  <div class="badge">RIDE <b id="vname">BMX</b> · <span id="vidx">1/20</span></div>
+  <div class="controls">
+    <span><kbd>←</kbd><kbd>→</kbd> switch</span>
+    <span><kbd>↑</kbd> wheelie</span>
+    <span><kbd>SPACE</kbd> ground trick</span>
+  </div>
+  <div class="meterwrap">⚡ <div class="meter"><div class="meterfill" id="mfill"></div></div></div>
+  <div class="score" id="score">0</div>
+</div>
+<div class="msg" id="msg">FALL OFF!</div>
+
+<script>
+(function(){
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const W=900,H=500;
+const GROUND_Y=410;
+const BIKE_X=340;
+
+/* ---------- 20 RIDES ---------- */
+const RIDES=[
+  {name:'BMX',        kind:'bike',   body:'#3fb6ff', dark:'#1462a0'},
+  {name:'Skateboard', kind:'skate',  body:'#ffcf40', dark:'#a67c00'},
+  {name:'Scooter',    kind:'scooter',body:'#ff6b6b', dark:'#a13030'},
+  {name:'Moto',       kind:'moto',   body:'#ff4d4d', dark:'#8f1f1f'},
+  {name:'Drift Car',  kind:'car',    body:'#a0e0ff', dark:'#2f5b7d'},
+  {name:'Wheelchair', kind:'chair',  body:'#c0c0c0', dark:'#5a5a5a'},
+  {name:'Roller',     kind:'skate',  body:'#d46bff', dark:'#7a2fa0'},
+  {name:'Fixie',      kind:'bike',   body:'#6bff9e', dark:'#1f7a44'},
+  {name:'Longboard',  kind:'skate',  body:'#ffb86b', dark:'#a05a1e'},
+  {name:'Pro Scoot',  kind:'scooter',body:'#6bc9ff', dark:'#1e6a99'},
+  {name:'Sport Bike', kind:'moto',   body:'#ff8c42', dark:'#a04a1e'},
+  {name:'Jeep',       kind:'car',    body:'#7ae07a', dark:'#2a7a2a'},
+  {name:'Cruiser',    kind:'skate',  body:'#ff6b9d', dark:'#a0305a'},
+  {name:'Tandem',     kind:'bike',   body:'#c9a0ff', dark:'#5a2f9e'},
+  {name:'Stunt Scoot',kind:'scooter',body:'#ffd966', dark:'#a08a1e'},
+  {name:'Chopper',    kind:'moto',   body:'#b3b3ff', dark:'#4a4aa0'},
+  {name:'Rally Car',  kind:'car',    body:'#ff9e5e', dark:'#a05a1e'},
+  {name:'Slalom',     kind:'skate',  body:'#5ee0c0', dark:'#1e7a5a'},
+  {name:'Power Chair',kind:'chair',  body:'#f0a0ff', dark:'#8a30a0'},
+  {name:'Fatbike',    kind:'bike',   body:'#ffb3b3', dark:'#a04a4a'},
+];
+
+/* ---------- STATE ---------- */
+let cur=0;
+let wheelie=0;
+let holdUp=false;
+let score=0;
+let scrollX=0;
+let cameraShake=0;
+let crashTimer=0;
+let trick=null;
+let fallRot=0;
+let stars=[];
+for(let i=0;i<80;i++) stars.push({x:Math.random()*W, y:Math.random()*330, r:Math.random()*1.5+.4, s:Math.random()*.4+.1});
+
+/* TUNED: forgiving fall, faster but controllable climb */
+const FALL_LIMIT=1.6;        // much higher — you can lean hard before wiping out
+const WHEELIE_UP=0.045;
+const WHEELIE_DOWN=0.038;
+const DANGER_ZONE=1.25;      // meter turns red here
+
+/* ---------- INPUT ---------- */
+addEventListener('keydown',e=>{
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  if(e.key==='ArrowUp') holdUp=true;
+  if(e.key==='ArrowRight' && crashTimer<=0){cur=(cur+1)%RIDES.length; wheelie*=.4; updateHUD();}
+  if(e.key==='ArrowLeft' && crashTimer<=0){cur=(cur-1+RIDES.length)%RIDES.length; wheelie*=.4; updateHUD();}
+  if(e.key===' ' && !trick && crashTimer<=0){
+    if(wheelie < 0.45){
+      trick={type:Math.floor(Math.random()*3)+1, t:0, dur:28};
+      score+=60+Math.floor((1-wheelie)*80);
+      cameraShake=7;
+      document.getElementById('score').textContent=score;
+    } else {
+      cameraShake=3;
+    }
+  }
+});
+addEventListener('keyup',e=>{ if(e.key==='ArrowUp') holdUp=false; });
+
+/* ---------- HUD ---------- */
+const vnameEl=document.getElementById('vname'),vidxEl=document.getElementById('vidx'),
+      mfillEl=document.getElementById('mfill'),scoreEl=document.getElementById('score'),
+      msgEl=document.getElementById('msg');
+function updateHUD(){
+  vnameEl.textContent=RIDES[cur].name;
+  vidxEl.textContent=(cur+1)+'/20';
+}
+function flashMsg(text){
+  msgEl.textContent=text;
+  msgEl.classList.add('show');
+  setTimeout(()=>msgEl.classList.remove('show'),700);
+}
+
+/* ---------- PHYSICS ---------- */
+function update(){
+  if(crashTimer>0){
+    crashTimer--;
+    fallRot += 0.09;
+    wheelie = Math.max(0, wheelie-0.02);
+    if(crashTimer===0){ wheelie=0; fallRot=0; }
+    mfillEl.style.width='0%';
+    mfillEl.classList.remove('danger');
+    return;
+  }
+
+  if(holdUp){
+    wheelie = Math.min(FALL_LIMIT+0.1, wheelie + WHEELIE_UP);
+    if(wheelie >= FALL_LIMIT){
+      crashTimer = 40;
+      fallRot = 0;
+      score = Math.max(0, score - 100);
+      scoreEl.textContent=score;
+      flashMsg('FALL OFF!');
+      cameraShake=14;
+      wheelie = FALL_LIMIT;
+    }
+  } else {
+    wheelie = Math.max(0, wheelie - WHEELIE_DOWN);
+  }
+
+  const speed = 3 + wheelie*16;
+  scrollX = (scrollX + speed) % 10000;
+
+  if(trick){
+    trick.t++;
+    if(trick.t>trick.dur) trick=null;
+  }
+
+  if(wheelie>0.15 && wheelie<FALL_LIMIT*0.85){
+    score += (wheelie>0.9)?3:1;
+    scoreEl.textContent=score;
+  }
+
+  if(cameraShake>0) cameraShake*=.85;
+
+  const pct = Math.min(100, (wheelie/FALL_LIMIT)*100);
+  mfillEl.style.width=pct+'%';
+  mfillEl.classList.toggle('danger', wheelie>DANGER_ZONE);
+}
+
+/* ---------- BACKGROUND ---------- */
+function drawBackground(){
+  const sky=ctx.createLinearGradient(0,0,0,GROUND_Y);
+  sky.addColorStop(0,'#0a0f1e');
+  sky.addColorStop(.6,'#141d33');
+  sky.addColorStop(1,'#1e2a45');
+  ctx.fillStyle=sky;
+  ctx.fillRect(0,0,W,GROUND_Y);
+
+  for(const s of stars){
+    s.x-=(s.s*(1+wheelie*5));
+    if(s.x<-4){ s.x=W+4; s.y=Math.random()*330; }
+    ctx.globalAlpha=.4+Math.sin(performance.now()*.002+s.x)*.25;
+    ctx.fillStyle='#fff';
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.r,0,7);
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  ctx.fillStyle='#131b2d';
+  for(let i=0;i<14;i++){
+    const bx=(i*70 - scrollX*0.2)%(W+140)-70;
+    const bh=40+((i*37)%70);
+    ctx.fillRect(bx,GROUND_Y-bh,50,bh);
+  }
+  ctx.fillStyle='#1a2438';
+  for(let i=0;i<12;i++){
+    const bx=(i*90 - scrollX*0.6)%(W+180)-90;
+    const bh=25+((i*53)%50);
+    ctx.fillRect(bx,GROUND_Y-bh,60,bh);
+  }
+
+  ctx.fillStyle='#232c42';
+  ctx.fillRect(0,GROUND_Y,W,H-GROUND_Y);
+  ctx.fillStyle='#2c3750';
+  ctx.fillRect(0,GROUND_Y,W,5);
+
+  ctx.strokeStyle='#4a5e85';
+  ctx.lineWidth=5;
+  ctx.setLineDash([34,46]);
+  ctx.lineDashOffset=-scrollX*5;
+  ctx.beginPath();
+  ctx.moveTo(0,GROUND_Y+55);
+  ctx.lineTo(W,GROUND_Y+55);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineDashOffset=0;
+
+  ctx.fillStyle='#39496b';
+  ctx.fillRect(0,GROUND_Y+20,W,2);
+  ctx.fillRect(0,H-8,W,8);
+
+  ctx.fillStyle='#2e3a56';
+  for(let i=0;i<16;i++){
+    const px=(i*80 - scrollX*3.5)%(W+160)-80;
+    ctx.fillRect(px,GROUND_Y-70,14,70);
+  }
+  ctx.fillStyle='#2f4a3a';
+  for(let i=0;i<20;i++){
+    const gx=(i*55 - scrollX*2.8)%(W+110)-55;
+    ctx.fillRect(gx,GROUND_Y-6,20,6);
+  }
+}
+
+/* ---------- RIDER (articulated character) ---------- */
+/* Draws a seated/standing rider in local vehicle space.
+   The rider leans based on wheelie and bails on crash. */
+function drawRider(kind, wheelieAmt){
+  const lean = Math.min(1.4, wheelieAmt * 0.55);   // rider leans back into wheelie
+  const bail = crashTimer>0 ? Math.min(1, fallRot/1.2) : 0;
+
+  // Determine rider anchor per vehicle kind (local coords, rear wheel at 0,0)
+  let anchorX, anchorY, hipY, shoulderY, headY;
+  if(kind==='bike'){ anchorX=42; anchorY=-30; hipY=-28; shoulderY=-58; headY=-76; }
+  else if(kind==='skate'){ anchorX=42; anchorY=-20; hipY=-18; shoulderY=-46; headY=-64; }
+  else if(kind==='scooter'){ anchorX=40; anchorY=-18; hipY=-16; shoulderY=-48; headY=-66; }
+  else if(kind==='moto'){ anchorX=46; anchorY=-32; hipY=-30; shoulderY=-58; headY=-76; }
+  else if(kind==='car'){ anchorX=45; anchorY=-28; hipY=-26; shoulderY=-52; headY=-70; }
+  else if(kind==='chair'){ anchorX=36; anchorY=-44; hipY=-40; shoulderY=-60; headY=-78; }
+
+  // On crash, the rider tumbles forward/down
+  const bailX = bail * 55;
+  const bailY = bail * 40;
+  const bailRot = bail * 2.2;
+
+  ctx.save();
+  ctx.translate(anchorX + bailX, anchorY + bailY);
+  ctx.rotate(-lean * 0.25 + bailRot);
+
+  // ---- LEGS ----
+  // thigh (hip -> knee)
+  ctx.strokeStyle = '#2a3a5a';
+  ctx.lineWidth = 9;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, hipY - anchorY);      // hip
+  ctx.lineTo(-12, hipY - anchorY + 16); // knee forward/down
+  ctx.stroke();
+
+  // shin (knee -> foot)
+  ctx.strokeStyle = '#1f2b44';
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(-12, hipY - anchorY + 16);
+  ctx.lineTo(-16, hipY - anchorY + 34); // foot
+  ctx.stroke();
+
+  // foot
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.ellipse(-18, hipY - anchorY + 36, 8, 4, 0, 0, 7);
+  ctx.fill();
+
+  // ---- TORSO ----
+  // torso from hip to shoulder
+  const hipLocalY = hipY - anchorY;
+  const shoulderLocalY = shoulderY - anchorY;
+  const torsoLen = shoulderLocalY - hipLocalY; // negative (up)
+
+  // jacket
+  ctx.fillStyle = '#2f4a7a';
+  ctx.beginPath();
+  ctx.moveTo(-9, hipLocalY);
+  ctx.lineTo(9, hipLocalY);
+  ctx.lineTo(6, shoulderLocalY);
+  ctx.lineTo(-6, shoulderLocalY);
+  ctx.closePath();
+  ctx.fill();
+
+  // backpack strap detail
+  ctx.strokeStyle = '#5a8ac8';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-5, hipLocalY - 2);
+  ctx.lineTo(-3, shoulderLocalY + 2);
+  ctx.stroke();
+
+  // ---- ARMS ----
+  // back arm reaching to handlebar / deck
+  ctx.strokeStyle = '#2a3a5a';
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-4, shoulderLocalY + 4);
+  // reach forward toward front of vehicle
+  ctx.lineTo(30 - anchorX + anchorX*0.1, shoulderLocalY + 12);
+  ctx.stroke();
+
+  // front arm
+  ctx.strokeStyle = '#2f4a7a';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(4, shoulderLocalY + 4);
+  ctx.lineTo(40 - anchorX*0.7, shoulderLocalY + 6);
+  ctx.stroke();
+
+  // ---- HEAD ----
+  const headLocalY = headY - anchorY;
+  // neck
+  ctx.fillStyle = '#e0b090';
+  ctx.fillRect(-3, shoulderLocalY - 6, 6, 8);
+
+  // head
+  ctx.fillStyle = '#f0c9a0';
+  ctx.beginPath();
+  ctx.arc(0, headLocalY + 4, 11, 0, 7);
+  ctx.fill();
+
+  // helmet / hair
+  ctx.fillStyle = kind==='moto'||kind==='bike' ? '#1a1a1a' : '#4a3020';
+  ctx.beginPath();
+  ctx.arc(0, headLocalY + 1, 11, Math.PI, Math.PI*2);
+  ctx.fill();
+  // helmet visor / face direction
+  ctx.fillStyle = '#333';
+  ctx.beginPath();
+  ctx.ellipse(6, headLocalY + 5, 5, 3, 0.2, 0, 7);
+  ctx.fill();
+  // eye
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.arc(6, headLocalY + 3, 1.5, 0, 7);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* ---------- VEHICLE DRAWING ---------- */
+function drawVehicle(){
+  const v=RIDES[cur];
+  const w=Math.min(wheelie, FALL_LIMIT);
+
+  const pivotX=BIKE_X-60;
+  const pivotY=GROUND_Y;
+
+  // angle scales with wheelie (allow lean past 1.0 for drama but capped visually)
+  let angle=-Math.min(w,1.0)*1.05;
+  if(crashTimer>0) angle += fallRot;
+
+  let spin=0, stretchY=1, shakeX=0, shakeY=0;
+  if(trick){
+    const p=trick.t/trick.dur;
+    const env=Math.sin(p*Math.PI);
+    if(trick.type===1) spin=env*Math.PI*2;
+    if(trick.type===2) stretchY=1+env*.6;
+    if(trick.type===3){ shakeX=Math.sin(p*40)*6; shakeY=Math.cos(p*33)*6; }
+  }
+
+  let camX=0, camY=0;
+  if(cameraShake>.3){
+    camX=(Math.random()-.5)*cameraShake*2;
+    camY=(Math.random()-.5)*cameraShake*2;
+  }
+
+  ctx.save();
+  ctx.translate(pivotX+camX+shakeX, pivotY+camY+shakeY);
+  ctx.rotate(angle);
+  ctx.scale(1,stretchY);
+
+  // shadow
+  ctx.save();
+  ctx.translate(0,4);
+  ctx.scale(1,0.35);
+  const shadowGrad=ctx.createRadialGradient(0,0,4,0,0,80);
+  shadowGrad.addColorStop(0,'rgba(0,0,0,.55)');
+  shadowGrad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=shadowGrad;
+  ctx.beginPath();
+  ctx.arc(0,0,80,0,7);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.translate(60, -40);
+  ctx.rotate(spin);
+  ctx.translate(-60, 40);
+
+  // draw vehicle body first, then rider on top
+  drawBikeShape(v.kind, v.body, v.dark, w);
+  drawRider(v.kind, w);
+
+  ctx.restore();
+
+  // trick sparks
+  if(trick){
+    const cx=pivotX+camX, cy=pivotY+camY-40;
+    ctx.save();
+    ctx.shadowBlur=25; ctx.shadowColor='#ffb547';
+    for(let i=0;i<10;i++){
+      const a=(trick.t*.35+i*.7);
+      const r=40+trick.t*1.5;
+      ctx.fillStyle=`hsl(${(i*40+trick.t*6)%360},100%,65%)`;
+      ctx.beginPath();
+      ctx.arc(cx+Math.cos(a)*r, cy+Math.sin(a)*r*.55, 5,0,7);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ground-touch dust
+  if(trick && wheelie<0.45){
+    ctx.save();
+    ctx.globalAlpha = 0.6 * (1 - trick.t/trick.dur);
+    ctx.fillStyle='#d8c9a8';
+    for(let i=0;i<8;i++){
+      const px=pivotX-10 + Math.random()*20;
+      const py=GROUND_Y - Math.random()*18;
+      ctx.beginPath();
+      ctx.arc(px,py,3+Math.random()*5,0,7);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // crash sparks
+  if(crashTimer>0){
+    ctx.save();
+    ctx.globalAlpha = crashTimer/40;
+    ctx.fillStyle='#ff7b3c';
+    for(let i=0;i<14;i++){
+      const a=Math.random()*Math.PI*2;
+      const r=Math.random()*50;
+      ctx.beginPath();
+      ctx.arc(pivotX+Math.cos(a)*r, GROUND_Y-Math.random()*40, 2+Math.random()*4,0,7);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function drawBikeShape(kind, body, dark, w){
+  const R=26;
+
+  // rear wheel at origin
+  ctx.save(); wheel(R,'#111','#2c2c2c','#555'); ctx.restore();
+
+  // front wheel
+  ctx.save();
+  ctx.translate(96,-8);
+  wheel(kind==='skate'?16:24,'#111','#2c2c2c','#555');
+  ctx.restore();
+
+  const hx=96, hy=-8;
+
+  if(kind==='bike'){
+    ctx.strokeStyle=body; ctx.lineWidth=7; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(0,0); ctx.lineTo(30,-28); ctx.lineTo(66,-34);
+    ctx.moveTo(30,-28); ctx.lineTo(56,-4);
+    ctx.moveTo(66,-34); ctx.lineTo(hx,hy);
+    ctx.moveTo(0,0); ctx.lineTo(56,-4);
+    ctx.stroke();
+    ctx.fillStyle=dark;
+    ctx.beginPath(); ctx.ellipse(32,-34,14,6,0,0,7); ctx.fill();
+    ctx.strokeStyle='#333'; ctx.lineWidth=5; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(88,-40); ctx.lineTo(100,-52); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(88,-40); ctx.lineTo(hx,hy); ctx.stroke();
+  }
+  else if(kind==='skate'){
+    ctx.fillStyle=body;
+    roundRect(0,-12,110,14,7); ctx.fill();
+    ctx.fillStyle=dark;
+    roundRect(0,0,110,4,2); ctx.fill();
+    ctx.fillStyle='#888';
+    ctx.fillRect(6,-4,10,8);
+    ctx.fillRect(92,-4,10,8);
+  }
+  else if(kind==='scooter'){
+    ctx.fillStyle=body;
+    roundRect(4,-6,86,12,6); ctx.fill();
+    ctx.strokeStyle=dark; ctx.lineWidth=6; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(hx,hy); ctx.lineTo(80,-58); ctx.stroke();
+    ctx.strokeStyle='#333'; ctx.lineWidth=5;
+    ctx.beginPath(); ctx.moveTo(72,-64); ctx.lineTo(90,-64); ctx.stroke();
+  }
+  else if(kind==='moto'){
+    ctx.fillStyle=body;
+    ctx.beginPath(); ctx.ellipse(52,-16,50,22,0,0,7); ctx.fill();
+    ctx.fillStyle=dark;
+    ctx.beginPath(); ctx.ellipse(48,-22,22,10,0,0,7); ctx.fill();
+    ctx.fillStyle='#222';
+    roundRect(16,-32,40,10,5); ctx.fill();
+    ctx.fillStyle='#999';
+    ctx.fillRect(-6,-6,26,7);
+    // handlebars
+    ctx.strokeStyle='#333'; ctx.lineWidth=5;
+    ctx.beginPath(); ctx.moveTo(84,-48); ctx.lineTo(100,-58); ctx.stroke();
+  }
+  else if(kind==='car'){
+    ctx.fillStyle=body;
+    ctx.beginPath();
+    ctx.moveTo(-8,-4);
+    ctx.lineTo(6,-40); ctx.lineTo(70,-46); ctx.lineTo(108,-10);
+    ctx.lineTo(104,0); ctx.lineTo(-8,0); ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle='#aad4ff';
+    roundRect(18,-36,34,16,6); ctx.fill();
+    ctx.fillStyle='#111';
+    ctx.beginPath(); ctx.arc(0,0,30,0,7); ctx.fill();
+    ctx.fillStyle='#333';
+    ctx.beginPath(); ctx.arc(0,0,16,0,7); ctx.fill();
+    ctx.fillStyle='#111';
+    ctx.beginPath(); ctx.arc(100,-2,24,0,7); ctx.fill();
+    ctx.fillStyle='#333';
+    ctx.beginPath(); ctx.arc(100,-2,13,0,7); ctx.fill();
+  }
+  else if(kind==='chair'){
+    ctx.fillStyle='#111';
+    ctx.beginPath(); ctx.arc(0,0,30,0,7); ctx.fill();
+    ctx.fillStyle='#888';
+    ctx.beginPath(); ctx.arc(0,0,16,0,7); ctx.fill();
+    ctx.fillStyle='#111';
+    ctx.beginPath(); ctx.arc(60,-10,9,0,7); ctx.fill();
+    ctx.fillStyle=body;
+    roundRect(10,-50,44,30,8); ctx.fill();
+    roundRect(8,-74,20,30,8); ctx.fill();
+  }
+}
+
+function wheel(r,c1,c2,c3){
+  ctx.fillStyle=c1; ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.fill();
+  ctx.fillStyle=c2; ctx.beginPath(); ctx.arc(0,0,r*.6,0,7); ctx.fill();
+  ctx.fillStyle=c3; ctx.beginPath(); ctx.arc(0,0,r*.22,0,7); ctx.fill();
+  ctx.strokeStyle=c3; ctx.lineWidth=2;
+  for(let i=0;i<6;i++){
+    const a=i*Math.PI/3;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a)*r*.2,Math.sin(a)*r*.2);
+    ctx.lineTo(Math.cos(a)*r*.9,Math.sin(a)*r*.9);
+    ctx.stroke();
+  }
+}
+
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+/* ---------- LOOP ---------- */
+function loop(){
+  update();
+  ctx.clearRect(0,0,W,H);
+  drawBackground();
+  drawVehicle();
+
+  ctx.font='bold 20px "Segoe UI",sans-serif';
+  ctx.fillStyle='rgba(220,235,255,.85)';
+  ctx.shadowColor='#000'; ctx.shadowBlur=8;
+  ctx.textAlign='right';
+  ctx.fillText(RIDES[cur].name, W-30, 44);
+  ctx.textAlign='left';
+  ctx.shadowBlur=0;
+
+  if(wheelie>.25){
+    ctx.strokeStyle=`rgba(255,255,255,${Math.min(wheelie,1)*.2})`;
+    ctx.lineWidth=2;
+    for(let i=0;i<12;i++){
+      const y=GROUND_Y-100-i*16;
+      const len=30+Math.min(wheelie,1)*110;
+      ctx.beginPath();
+      ctx.moveTo(0,y);
+      ctx.lineTo(len,y);
+      ctx.stroke();
+    }
+  }
+
+  requestAnimationFrame(loop);
+}
+
+updateHUD();
+loop();
+})();
+</script>
+</body>
+</html>

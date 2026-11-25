@@ -1,0 +1,2685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Rocket Arena 3D — P2P Multiplayer & AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js r128 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- PeerJS 1.5.4 -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #060913;
+      font-family: 'Inter', sans-serif;
+      color: #f8fafc;
+    }
+    .font-display {
+      font-family: 'Orbitron', sans-serif;
+    }
+    #game-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .glass-panel {
+      background: rgba(10, 16, 32, 0.82);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), inset 0 0 20px rgba(56, 189, 248, 0.06);
+    }
+    .neon-blue {
+      text-shadow: 0 0 12px rgba(56, 189, 248, 0.8), 0 0 28px rgba(14, 165, 233, 0.5);
+    }
+    .neon-orange {
+      text-shadow: 0 0 12px rgba(251, 146, 60, 0.8), 0 0 28px rgba(234, 88, 12, 0.5);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+      transition: all 0.18s ease;
+      box-shadow: 0 4px 18px rgba(37, 99, 235, 0.45);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(56, 189, 248, 0.65);
+    }
+    .btn-primary:active {
+      transform: translateY(0px);
+    }
+    .btn-orange {
+      background: linear-gradient(135deg, #ea580c 0%, #d97706 100%);
+      transition: all 0.18s ease;
+      box-shadow: 0 4px 18px rgba(234, 88, 12, 0.45);
+    }
+    .btn-orange:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(251, 146, 60, 0.65);
+    }
+    @keyframes pulseRing {
+      0% { transform: scale(0.95); opacity: 0.9; }
+      50% { transform: scale(1.05); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.9; }
+    }
+    .pulse-ring {
+      animation: pulseRing 1.6s infinite ease-in-out;
+    }
+    /* Custom scrollbar for small screens */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+    ::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.4); border-radius: 9999px; }
+  </style>
+</head>
+<body>
+
+  <!-- 3D Canvas Container -->
+  <div id="game-container"></div>
+
+  <!-- Top HUD Bar (Scoreboard, Timer, Status) -->
+  <div id="hud-top" class="fixed top-0 left-0 right-0 z-20 pointer-events-none flex flex-col items-center pt-3 px-4 hidden">
+    <div class="flex items-center justify-center gap-2 sm:gap-4 glass-panel rounded-2xl px-4 py-2 sm:px-6 sm:py-2.5">
+      <!-- Blue Team Score -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <div class="text-right">
+          <div id="hud-blue-label" class="text-[10px] sm:text-xs font-bold tracking-wider uppercase text-sky-400">BLUE (YOU)</div>
+          <div class="h-1 w-10 sm:w-14 bg-sky-500 rounded-full ml-auto"></div>
+        </div>
+        <div id="hud-score-blue" class="font-display text-2xl sm:text-4xl font-black text-sky-400 neon-blue">0</div>
+      </div>
+
+      <!-- Clock -->
+      <div class="px-3 sm:px-5 py-1 bg-slate-950/80 rounded-xl border border-slate-700/80 text-center min-w-[84px] sm:min-w-[104px]">
+        <div id="hud-timer" class="font-display text-lg sm:text-2xl font-bold tracking-wider text-white">3:00</div>
+        <div id="hud-overtime" class="text-[9px] font-bold uppercase tracking-widest text-amber-400 hidden">OVERTIME</div>
+      </div>
+
+      <!-- Orange Team Score -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <div id="hud-score-orange" class="font-display text-2xl sm:text-4xl font-black text-orange-400 neon-orange">0</div>
+        <div class="text-left">
+          <div id="hud-orange-label" class="text-[10px] sm:text-xs font-bold tracking-wider uppercase text-orange-400">ORANGE</div>
+          <div class="h-1 w-10 sm:w-14 bg-orange-500 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Badges & Quick Buttons -->
+    <div class="mt-2 flex flex-wrap items-center justify-center gap-2 pointer-events-auto">
+      <span id="hud-connection-badge" class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-900/85 border border-sky-500/40 text-sky-300 flex items-center gap-1.5">
+        <span id="hud-conn-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        <span id="hud-conn-text">AI BOT MATCH</span>
+      </span>
+
+      <button id="btn-cam-toggle" class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-900/85 hover:bg-slate-800 border border-slate-600/60 text-slate-200 transition cursor-pointer">
+        CAM: <span id="hud-cam-mode" class="text-amber-300 font-bold">BALL CAM</span> [C]
+      </button>
+
+      <button id="btn-mute-toggle" class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-900/85 hover:bg-slate-800 border border-slate-600/60 text-slate-200 transition cursor-pointer">
+        🔊 SFX
+      </button>
+
+      <button id="btn-leave-match" class="px-3 py-1 rounded-full text-xs font-semibold bg-rose-950/85 hover:bg-rose-900 border border-rose-500/40 text-rose-200 transition cursor-pointer">
+        MENU
+      </button>
+    </div>
+  </div>
+
+  <!-- Center Banner Notification (Countdown / Goal / Matchmaking Fallback Toast) -->
+  <div id="center-banner" class="fixed inset-0 z-20 pointer-events-none flex flex-col items-center justify-center px-4 hidden">
+    <div id="banner-title" class="font-display text-4xl sm:text-7xl font-black tracking-wider uppercase text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)] text-center">
+      3
+    </div>
+    <div id="banner-subtitle" class="mt-2 px-4 py-1.5 rounded-full bg-slate-950/80 border border-white/15 text-sm sm:text-lg font-semibold text-sky-300 text-center">
+      GET READY
+    </div>
+  </div>
+
+  <!-- Toast Notification (Top-right / Bottom-top non-blocking alerts) -->
+  <div id="toast-container" class="fixed top-24 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center gap-2 w-full max-w-md px-4"></div>
+
+  <!-- Bottom HUD: Boost Meter & Controls Hint -->
+  <div id="hud-bottom" class="fixed bottom-4 left-4 right-4 z-20 pointer-events-none flex items-end justify-between hidden">
+    <!-- Controls Quick Legend (Desktop) -->
+    <div class="hidden md:flex flex-col gap-1 glass-panel rounded-xl px-3.5 py-2.5 text-[11px] text-slate-300">
+      <div class="font-bold text-slate-100 uppercase tracking-wider text-[10px] mb-0.5">Controls</div>
+      <div><span class="text-sky-400 font-bold">W A S D / Arrows</span> Drive & Air Pitch/Yaw</div>
+      <div><span class="text-sky-400 font-bold">SPACE (x2 + Dir)</span> Jump / Dodge Flip</div>
+      <div><span class="text-orange-400 font-bold">L-Click / E / R-Shift</span> 3D Rocket Boost</div>
+      <div><span class="text-amber-300 font-bold">L-Shift / Q</span> Drift & Air Roll &nbsp;|&nbsp; <span class="text-amber-300 font-bold">C</span> Ball Cam</div>
+    </div>
+
+    <!-- Mobile Touch Controls (Visible on touch / small screens) -->
+    <div id="mobile-controls" class="flex md:hidden items-center gap-2 pointer-events-auto">
+      <div class="grid grid-cols-3 gap-1.5 w-32 h-24">
+        <div></div>
+        <button id="touch-up" class="bg-slate-800/80 active:bg-sky-600 border border-slate-600 rounded-xl flex items-center justify-center text-lg font-bold">▲</button>
+        <div></div>
+        <button id="touch-left" class="bg-slate-800/80 active:bg-sky-600 border border-slate-600 rounded-xl flex items-center justify-center text-lg font-bold">◀</button>
+        <button id="touch-down" class="bg-slate-800/80 active:bg-sky-600 border border-slate-600 rounded-xl flex items-center justify-center text-lg font-bold">▼</button>
+        <button id="touch-right" class="bg-slate-800/80 active:bg-sky-600 border border-slate-600 rounded-xl flex items-center justify-center text-lg font-bold">▶</button>
+      </div>
+    </div>
+
+    <!-- Right side: Mobile Action Buttons + Circular Boost Gauge -->
+    <div class="flex items-center gap-3">
+      <div class="flex md:hidden flex-col gap-2 pointer-events-auto">
+        <button id="touch-boost" class="px-4 py-3 rounded-xl bg-orange-600/90 active:bg-orange-400 font-display font-bold text-xs tracking-wider shadow-lg">BOOST</button>
+        <button id="touch-jump" class="px-4 py-3 rounded-xl bg-sky-600/90 active:bg-sky-400 font-display font-bold text-xs tracking-wider shadow-lg">JUMP</button>
+      </div>
+
+      <!-- Boost Gauge -->
+      <div class="relative w-24 h-24 sm:w-28 sm:h-28 glass-panel rounded-full flex items-center justify-center">
+        <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="40" stroke="rgba(30,41,59,0.9)" stroke-width="9" fill="none" />
+          <circle id="boost-ring" cx="50" cy="50" r="40" stroke="#f97316" stroke-width="9" stroke-linecap="round"
+                  stroke-dasharray="251.2" stroke-dashoffset="0" fill="none" />
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span id="hud-boost-val" class="font-display text-xl sm:text-2xl font-black text-white">100</span>
+          <span class="text-[9px] font-bold tracking-widest text-orange-400 uppercase">BOOST</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN MENU & MATCHMAKING LOBBY OVERLAY -->
+  <div id="menu-overlay" class="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-sm overflow-y-auto">
+    <div class="glass-panel rounded-3xl max-w-xl w-full p-6 sm:p-8 my-auto relative overflow-hidden">
+      <!-- Decorative Top Glow -->
+      <div class="absolute -top-24 -left-24 w-56 h-56 bg-sky-500/20 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -bottom-24 -right-24 w-56 h-56 bg-orange-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+      <!-- Title Header -->
+      <div class="text-center mb-6 relative">
+        <div class="inline-block px-3 py-1 rounded-full bg-sky-500/15 border border-sky-400/30 text-sky-300 text-xs font-bold tracking-widest uppercase mb-2">
+          WebGL 3D • PeerJS P2P • Smart AI
+        </div>
+        <h1 class="font-display text-3xl sm:text-5xl font-black tracking-tight text-white">
+          ROCKET <span class="text-sky-400 neon-blue">ARENA</span> <span class="text-orange-400 neon-orange">3D</span>
+        </h1>
+        <p class="text-slate-400 text-xs sm:text-sm mt-2">
+          Supersonic vehicular soccar. Instant P2P online matchmaking with automatic AI fallback.
+        </p>
+      </div>
+
+      <!-- Primary Matchmaking View -->
+      <div id="menu-main-view" class="space-y-4">
+        <!-- 1. Random Online Matchmaking -->
+        <button id="btn-play-online" class="w-full btn-primary rounded-2xl p-4 text-left flex items-center justify-between group cursor-pointer">
+          <div>
+            <div class="font-display font-bold text-base sm:text-lg text-white flex items-center gap-2">
+              <span>🌐 PLAY ONLINE (RANDOM MATCH)</span>
+            </div>
+            <div class="text-xs text-sky-100/85 mt-0.5">
+              Searches public P2P lobby slots • Auto-matches vs AI if no players online
+            </div>
+          </div>
+          <span class="font-display text-xl font-black text-white/90 group-hover:translate-x-1 transition-transform">→</span>
+        </button>
+
+        <!-- 2. Instant Bot Match with Difficulty Selector -->
+        <div class="bg-slate-900/75 border border-slate-700/70 rounded-2xl p-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div class="font-display font-bold text-sm sm:text-base text-orange-400">🤖 INSTANT AI BOT MATCH</div>
+              <div class="text-xs text-slate-400">1v1 Exhibition against tactical AI</div>
+            </div>
+            <div class="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <button data-diff="rookie" class="diff-btn px-2.5 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition cursor-pointer">Rookie</button>
+              <button data-diff="pro" class="diff-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-orange-500 text-white transition cursor-pointer">Pro</button>
+              <button data-diff="allstar" class="diff-btn px-2.5 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition cursor-pointer">All-Star</button>
+            </div>
+          </div>
+          <button id="btn-play-ai" class="mt-3 w-full btn-orange rounded-xl py-2.5 font-display font-bold text-sm text-white tracking-wider cursor-pointer">
+            START 1v1 BOT MATCH
+          </button>
+        </div>
+
+        <!-- 3. Private Match (PeerJS Direct Room ID) -->
+        <div class="bg-slate-900/75 border border-slate-700/70 rounded-2xl p-4">
+          <div class="font-display font-bold text-sm text-slate-200 mb-2">🔗 PRIVATE P2P ROOM (FRIEND MATCH)</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <button id="btn-host-private" class="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-sky-500/30 text-sky-300 font-semibold text-xs transition cursor-pointer">
+              Create Private Room ID
+            </button>
+            <div class="flex gap-1.5">
+              <input id="input-join-id" type="text" placeholder="Paste Friend's ID..."
+                     class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-400" />
+              <button id="btn-join-private" class="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition cursor-pointer shrink-0">
+                Join
+              </button>
+            </div>
+          </div>
+          <!-- Hosted Room Code Display -->
+          <div id="private-host-box" class="mt-3 p-3 rounded-xl bg-slate-950/90 border border-sky-500/40 hidden">
+            <div class="text-[11px] text-slate-400">Share this Room ID with your friend:</div>
+            <div class="flex items-center justify-between gap-2 mt-1">
+              <code id="private-room-code" class="font-mono text-xs sm:text-sm text-sky-300 font-bold truncate">Generating...</code>
+              <button id="btn-copy-code" class="px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-xs font-semibold shrink-0 cursor-pointer">
+                Copy
+              </button>
+            </div>
+            <div id="private-host-status" class="text-[11px] text-amber-400 mt-1.5 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+              Waiting for opponent to connect...
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Searching Matchmaking View (Shown during Random Matchmaking) -->
+      <div id="menu-searching-view" class="hidden py-6 text-center space-y-5">
+        <div class="relative w-20 h-20 mx-auto flex items-center justify-center">
+          <div class="absolute inset-0 rounded-full border-4 border-sky-500/30 pulse-ring"></div>
+          <div class="w-14 h-14 rounded-full border-4 border-t-sky-400 border-r-orange-400 border-b-sky-400 border-l-transparent animate-spin"></div>
+          <span id="search-countdown-num" class="absolute font-display font-black text-lg text-white">6</span>
+        </div>
+
+        <div>
+          <h3 id="search-status-title" class="font-display text-lg font-bold text-white">SEARCHING FOR ONLINE PLAYERS...</h3>
+          <p id="search-status-desc" class="text-xs text-slate-400 mt-1">
+            Scanning P2P Arena Lobbies • Auto-starting vs AI Bot in <span id="search-sec-text" class="text-sky-400 font-bold">6s</span> if empty
+          </p>
+        </div>
+
+        <button id="btn-cancel-search" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-semibold text-slate-300 transition cursor-pointer">
+          Cancel Search
+        </button>
+      </div>
+
+      <!-- Post-Match Summary View -->
+      <div id="menu-gameover-view" class="hidden py-4 text-center space-y-5">
+        <div id="gameover-result" class="font-display text-3xl sm:text-4xl font-black text-sky-400 neon-blue">
+          BLUE TEAM WINS!
+        </div>
+        <div class="flex items-center justify-center gap-6 py-3 bg-slate-950/75 rounded-2xl border border-slate-800">
+          <div>
+            <div class="text-xs font-bold text-sky-400">BLUE</div>
+            <div id="final-score-blue" class="font-display text-4xl font-black text-white">0</div>
+          </div>
+          <div class="font-display text-xl text-slate-600">VS</div>
+          <div>
+            <div class="text-xs font-bold text-orange-400">ORANGE</div>
+            <div id="final-score-orange" class="font-display text-4xl font-black text-white">0</div>
+          </div>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3 justify-center">
+          <button id="btn-rematch" class="btn-primary px-6 py-3 rounded-xl font-display font-bold text-sm text-white cursor-pointer">
+            PLAY AGAIN
+          </button>
+          <button id="btn-back-menu" class="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 font-display font-bold text-sm text-slate-200 cursor-pointer">
+            MAIN MENU
+          </button>
+        </div>
+      </div>
+
+      <!-- Footer Controls Strip -->
+      <div class="mt-6 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+        <span>Drive/Air: <strong class="text-slate-200">WASD/Arrows</strong></span>
+        <span>Jump/Flip: <strong class="text-slate-200">Space (x2)</strong></span>
+        <span>Boost: <strong class="text-slate-200">Click / E</strong></span>
+        <span>Air Roll: <strong class="text-slate-200">Q / Shift</strong></span>
+      </div>
+    </div>
+  </div>
+
+<script>
+/**
+ * ============================================================================
+ * ROCKET ARENA 3D — Complete Self-Contained 3D Vehicular Soccar + PeerJS + AI
+ * ============================================================================
+ */
+
+// ----------------------------------------------------------------------------
+// 1. WEB AUDIO API SYNTHESIZER (Zero external audio files required)
+// ----------------------------------------------------------------------------
+class SoundFX {
+  constructor() {
+    this.ctx = null;
+    this.muted = false;
+    this.engineOsc = null;
+    this.engineGain = null;
+    this.boostNoise = null;
+    this.boostGain = null;
+    this.initialized = false;
+  }
+
+  init() {
+    if (this.initialized) return;
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AudioContext();
+
+      // Continuous subtle engine hum
+      this.engineOsc = this.ctx.createOscillator();
+      this.engineGain = this.ctx.createGain();
+      this.engineOsc.type = 'sawtooth';
+      this.engineOsc.frequency.value = 55;
+
+      const engineFilter = this.ctx.createBiquadFilter();
+      engineFilter.type = 'lowpass';
+      engineFilter.frequency.value = 180;
+
+      this.engineGain.gain.value = 0.0;
+      this.engineOsc.connect(engineFilter);
+      engineFilter.connect(this.engineGain);
+      this.engineGain.connect(this.ctx.destination);
+      this.engineOsc.start();
+
+      // Continuous white-noise rocket boost whoosh
+      const bufferSize = this.ctx.sampleRate * 2;
+      const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+      this.boostNoise = this.ctx.createBufferSource();
+      this.boostNoise.buffer = noiseBuffer;
+      this.boostNoise.loop = true;
+
+      const boostFilter = this.ctx.createBiquadFilter();
+      boostFilter.type = 'bandpass';
+      boostFilter.frequency.value = 420;
+      boostFilter.Q.value = 1.2;
+
+      this.boostGain = this.ctx.createGain();
+      this.boostGain.gain.value = 0.0;
+
+      this.boostNoise.connect(boostFilter);
+      boostFilter.connect(this.boostGain);
+      this.boostGain.connect(this.ctx.destination);
+      this.boostNoise.start();
+
+      this.initialized = true;
+    } catch (e) {
+      console.warn('Web Audio API unavailable:', e);
+    }
+  }
+
+  resume() {
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  setMuted(m) {
+    this.muted = m;
+    if (this.muted && this.initialized) {
+      this.engineGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+      this.boostGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+    }
+  }
+
+  updateContinuous(speedRatio, isBoosting, active) {
+    if (!this.initialized || this.muted || !active) {
+      if (this.initialized) {
+        this.engineGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
+        this.boostGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
+      }
+      return;
+    }
+    const now = this.ctx.currentTime;
+    const freq = 48 + Math.min(1, speedRatio) * 95 + (isBoosting ? 35 : 0);
+    this.engineOsc.frequency.setTargetAtTime(freq, now, 0.06);
+    this.engineGain.gain.setTargetAtTime(0.035 + speedRatio * 0.03, now, 0.08);
+    this.boostGain.gain.setTargetAtTime(isBoosting ? 0.14 : 0.0, now, 0.05);
+  }
+
+  playJump(isFlip = false) {
+    if (!this.initialized || this.muted) return;
+    this.resume();
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = isFlip ? 'triangle' : 'sine';
+    osc.frequency.setValueAtTime(isFlip ? 180 : 140, now);
+    osc.frequency.exponentialRampToValueAtTime(isFlip ? 520 : 340, now + 0.16);
+    gain.gain.setValueAtTime(0.18, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.19);
+  }
+
+  playBallHit(intensity = 0.5) {
+    if (!this.initialized || this.muted) return;
+    this.resume();
+    const clamped = Math.max(0.15, Math.min(1.0, intensity));
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(110 + clamped * 90, now);
+    osc.frequency.exponentialRampToValueAtTime(38, now + 0.18);
+    gain.gain.setValueAtTime(0.28 * clamped, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.21);
+  }
+
+  playBoostPickup() {
+    if (!this.initialized || this.muted) return;
+    this.resume();
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(440, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.14);
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.16);
+  }
+
+  playCountdown(isGo = false) {
+    if (!this.initialized || this.muted) return;
+    this.resume();
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(isGo ? 880 : 440, now);
+    gain.gain.setValueAtTime(0.16, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + (isGo ? 0.35 : 0.18));
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + (isGo ? 0.36 : 0.19));
+  }
+
+  playGoalExplosion() {
+    if (!this.initialized || this.muted) return;
+    this.resume();
+    const now = this.ctx.currentTime;
+    // Deep sub boom + stadium horn chord
+    [65, 130.81, 164.81, 196.00].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = idx === 0 ? 'sine' : 'sawtooth';
+      osc.frequency.setValueAtTime(freq, now);
+      if (idx === 0) {
+        osc.frequency.exponentialRampToValueAtTime(28, now + 0.9);
+      }
+      gain.gain.setValueAtTime(idx === 0 ? 0.35 : 0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 1.15);
+    });
+  }
+
+  playPinchBoom() {
+    if (!this.initialized || this.muted) return;
+    this.resume();
+    const now = this.ctx.currentTime;
+    // Crisp metallic sonic crack + sub punch for wall/floor/corner pinches
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(520, now);
+    osc1.frequency.exponentialRampToValueAtTime(62, now + 0.28);
+
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(1240, now);
+    osc2.frequency.exponentialRampToValueAtTime(210, now + 0.22);
+
+    gain.gain.setValueAtTime(0.32, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.32);
+    osc2.stop(now + 0.32);
+  }
+}
+
+const sfx = new SoundFX();
+
+// ----------------------------------------------------------------------------
+// 2. ARENA & PHYSICS CONSTANTS (Expanded Pro-Scale Stadium)
+// ----------------------------------------------------------------------------
+const ARENA = {
+  WIDTH: 112,      // X: -56 to +56 (Much wider for side-wall pinches & aerials)
+  LENGTH: 174,     // Z: -87 to +87 (Longer field for supersonic boost runs)
+  HEIGHT: 44,      // Y: 0 to 44 (High ceiling for aerial play)
+  GOAL_WIDTH: 26,  // X: -13 to +13
+  GOAL_HEIGHT: 11.0,
+  GOAL_DEPTH: 12,
+  BALL_RADIUS: 2.8,
+  CAR_HALF_W: 1.35,
+  CAR_HALF_H: 0.75,
+  CAR_HALF_L: 2.25,
+  GRAVITY: -33.0,
+  MATCH_DURATION: 180 // 3:00
+};
+
+const LOBBY_SLOTS = [
+  'rl-p2p-arena-lobby-01',
+  'rl-p2p-arena-lobby-02',
+  'rl-p2p-arena-lobby-03',
+  'rl-p2p-arena-lobby-04',
+  'rl-p2p-arena-lobby-05'
+];
+
+// ----------------------------------------------------------------------------
+// 3. GLOBAL GAME STATE
+// ----------------------------------------------------------------------------
+const state = {
+  mode: 'MENU', // 'MENU' | 'SEARCHING' | 'COUNTDOWN' | 'PLAYING' | 'GOAL_CELEBRATION' | 'GAMEOVER'
+  matchType: 'AI', // 'AI' | 'P2P_PUBLIC' | 'P2P_PRIVATE'
+  role: 'HOST',    // 'HOST' (Blue, -Z) | 'GUEST' (Orange, +Z)
+  aiDifficulty: 'pro', // 'rookie' | 'pro' | 'allstar'
+  opponentIsBot: true,
+
+  scoreBlue: 0,
+  scoreOrange: 0,
+  timeRemaining: ARENA.MATCH_DURATION,
+  overtime: false,
+  countdownTimer: 0,
+  lastCountdownBeep: 4,
+  goalPauseTimer: 0,
+
+  ballCam: true,
+  cameraShake: 0,
+
+  // Local player physics state
+  localCar: null,
+  // Remote player (either P2P peer or AI Bot)
+  remoteCar: null,
+  // Ball state
+  ball: {
+    pos: new THREE.Vector3(0, ARENA.BALL_RADIUS, 0),
+    vel: new THREE.Vector3(0, 0, 0),
+    angVel: new THREE.Vector3(0, 0, 0),
+    targetPos: new THREE.Vector3(0, ARENA.BALL_RADIUS, 0),
+    targetVel: new THREE.Vector3(0, 0, 0)
+  },
+  // 8 Boost Pads: 4 corners (100 boost) + 4 midfield/side-wall pads (45 boost)
+  boostPads: [
+    { id: 0, x: -44, z: -68, amount: 100, big: true, active: true, cooldown: 0 },
+    { id: 1, x:  44, z: -68, amount: 100, big: true, active: true, cooldown: 0 },
+    { id: 2, x: -44, z:  68, amount: 100, big: true, active: true, cooldown: 0 },
+    { id: 3, x:  44, z:  68, amount: 100, big: true, active: true, cooldown: 0 },
+    { id: 4, x: -44, z:   0, amount: 45,  big: false, active: true, cooldown: 0 },
+    { id: 5, x:  44, z:   0, amount: 45,  big: false, active: true, cooldown: 0 },
+    { id: 6, x: -20, z: -28, amount: 45,  big: false, active: true, cooldown: 0 },
+    { id: 7, x:  20, z:  28, amount: 45,  big: false, active: true, cooldown: 0 }
+  ],
+  pinchCooldown: 0
+};
+
+function createCarState(team) {
+  const isBlue = team === 'blue';
+  const startYaw = isBlue ? 0 : Math.PI;
+  const startQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), startYaw);
+  return {
+    team,
+    pos: new THREE.Vector3(0, ARENA.CAR_HALF_H, isBlue ? -52 : 52),
+    vel: new THREE.Vector3(0, 0, 0),
+    yaw: startYaw,
+    quat: startQuat.clone(),
+    targetQuat: startQuat.clone(),
+    boost: 100,
+    grounded: true,
+    jumpsRemaining: 2,
+    flipTimer: 0,
+    flipDir: new THREE.Vector2(0, 0),
+    isBoosting: false,
+    isDrifting: false,
+    lastWallNormal: new THREE.Vector3(0, 0, 0),
+    wallContactTimer: 0,
+    // For network interpolation
+    targetPos: new THREE.Vector3(0, ARENA.CAR_HALF_H, isBlue ? -52 : 52),
+    targetYaw: startYaw
+  };
+}
+
+state.localCar = createCarState('blue');
+state.remoteCar = createCarState('orange');
+
+// ----------------------------------------------------------------------------
+// 4. INPUT HANDLING (Keyboard + Mouse + Mobile Touch)
+// ----------------------------------------------------------------------------
+const keys = {};
+let mouseBoost = false;
+let lastSpacePressTime = 0;
+
+window.addEventListener('keydown', (e) => {
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+  sfx.init();
+  sfx.resume();
+
+  const code = e.code;
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(code)) {
+    e.preventDefault();
+  }
+
+  if (!keys[code]) {
+    keys[code] = true;
+    // Jump / Dodge Flip trigger on Space press
+    if (code === 'Space') {
+      handleJumpInput();
+    }
+    // Toggle Ball Cam
+    if (code === 'KeyC' || code === 'Tab' || code === 'KeyF') {
+      toggleBallCam();
+    }
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+});
+
+window.addEventListener('mousedown', (e) => {
+  if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+  sfx.init();
+  sfx.resume();
+  if (e.button === 0) mouseBoost = true;
+});
+
+window.addEventListener('mouseup', (e) => {
+  if (e.button === 0) mouseBoost = false;
+});
+
+function getLocalControls() {
+  const throttle = (keys['KeyW'] || keys['ArrowUp'] || keys['TouchUp'] ? 1 : 0)
+                 - (keys['KeyS'] || keys['ArrowDown'] || keys['TouchDown'] ? 1 : 0);
+  const steer = (keys['KeyA'] || keys['ArrowLeft'] || keys['TouchLeft'] ? 1 : 0)
+              - (keys['KeyD'] || keys['ArrowRight'] || keys['TouchRight'] ? 1 : 0);
+  const boost = !!(mouseBoost || keys['KeyE'] || keys['ShiftRight'] || keys['TouchBoost']);
+  const drift = !!(keys['ShiftLeft']);
+  const airRollMod = !!(keys['ShiftLeft'] || keys['KeyQ']);
+  const directRoll = (keys['KeyE'] ? 0 : 0) + (keys['KeyQ'] && !keys['ShiftLeft'] ? 1 : 0);
+  return { throttle, steer, boost, drift, airRollMod, directRoll };
+}
+
+function handleJumpInput() {
+  if (state.mode !== 'PLAYING' && state.mode !== 'GOAL_CELEBRATION') return;
+  const car = state.localCar;
+  if (!car) return;
+
+  const now = performance.now();
+  const ctrl = getLocalControls();
+
+  if (car.grounded && car.jumpsRemaining > 0) {
+    // First Jump
+    car.vel.y = 16.0;
+    car.grounded = false;
+    car.jumpsRemaining = 1;
+    lastSpacePressTime = now;
+    sfx.playJump(false);
+  } else if (!car.grounded && car.jumpsRemaining > 0) {
+    // Second Jump or Directional Dodge Flip!
+    car.jumpsRemaining = 0;
+    const hasDir = Math.abs(ctrl.throttle) > 0 || Math.abs(ctrl.steer) > 0;
+    if (hasDir || (now - lastSpacePressTime < 650)) {
+      // Extract horizontal forward and right from car's current 3D orientation
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(car.quat);
+      forward.y = 0;
+      if (forward.lengthSq() < 0.001) forward.set(Math.sin(car.yaw), 0, Math.cos(car.yaw));
+      else forward.normalize();
+
+      const right = new THREE.Vector3(forward.z, 0, -forward.x);
+
+      const fDir = ctrl.throttle !== 0 ? ctrl.throttle : 1; // Default forward flip if double-tapped
+      const sDir = -ctrl.steer;
+
+      const impulse = new THREE.Vector3()
+        .addScaledVector(forward, fDir * 19.0)
+        .addScaledVector(right, sDir * 16.5);
+
+      car.vel.x += impulse.x;
+      car.vel.z += impulse.z;
+      car.vel.y = Math.max(car.vel.y, 7.2);
+      car.flipTimer = 0.42;
+      car.flipDir.set(fDir, sDir);
+      sfx.playJump(true);
+    } else {
+      // Straight double-jump
+      car.vel.y = Math.max(car.vel.y + 12.5, 14.5);
+      sfx.playJump(false);
+    }
+  }
+}
+
+function toggleBallCam() {
+  state.ballCam = !state.ballCam;
+  document.getElementById('hud-cam-mode').textContent = state.ballCam ? 'BALL CAM' : 'CAR CAM';
+}
+
+// Setup Touch Controls
+function bindTouchButton(id, keyName, onPressAction = null) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    sfx.init();
+    sfx.resume();
+    keys[keyName] = true;
+    if (onPressAction) onPressAction();
+  }, { passive: false });
+  el.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    keys[keyName] = false;
+  }, { passive: false });
+}
+bindTouchButton('touch-up', 'TouchUp');
+bindTouchButton('touch-down', 'TouchDown');
+bindTouchButton('touch-left', 'TouchLeft');
+bindTouchButton('touch-right', 'TouchRight');
+bindTouchButton('touch-boost', 'TouchBoost');
+bindTouchButton('touch-jump', 'TouchJump', handleJumpInput);
+
+// ----------------------------------------------------------------------------
+// 5. THREE.JS 3D SCENE, ARENA, CARS, BALL & PARTICLES
+// ----------------------------------------------------------------------------
+const container = document.getElementById('game-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050811);
+scene.fog = new THREE.FogExp2(0x050811, 0.0042);
+
+const camera = new THREE.PerspectiveCamera(84, window.innerWidth / window.innerHeight, 0.5, 450);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Lighting
+const ambientLight = new THREE.AmbientLight(0x8ba4d0, 0.65);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+dirLight.position.set(30, 65, 20);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
+dirLight.shadow.camera.near = 10;
+dirLight.shadow.camera.far = 160;
+const d = 72;
+dirLight.shadow.camera.left = -d;
+dirLight.shadow.camera.right = d;
+dirLight.shadow.camera.top = d;
+dirLight.shadow.camera.bottom = -d;
+scene.add(dirLight);
+
+// Colored stadium end lights
+const blueGoalLight = new THREE.PointLight(0x0ea5e9, 2.4, 85);
+blueGoalLight.position.set(0, 14, -ARENA.LENGTH / 2);
+scene.add(blueGoalLight);
+
+const orangeGoalLight = new THREE.PointLight(0xf97316, 2.4, 85);
+orangeGoalLight.position.set(0, 14, ARENA.LENGTH / 2);
+scene.add(orangeGoalLight);
+
+// Build Stadium Pitch Texture procedurally
+function createPitchTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 1536;
+  const ctx = c.getContext('2d');
+
+  // Deep cyber turf base
+  ctx.fillStyle = '#0b1528';
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  // Subtle alternating turf stripes
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(14, 165, 233, 0.04)' : 'rgba(15, 23, 42, 0.25)';
+    ctx.fillRect(0, (c.height / 12) * i, c.width, c.height / 12);
+  }
+
+  // Subtle hex/grid pattern
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+  ctx.lineWidth = 2;
+  const step = 64;
+  for (let x = 0; x <= c.width; x += step) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, c.height); ctx.stroke();
+  }
+  for (let y = 0; y <= c.height; y += step) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(c.width, y); ctx.stroke();
+  }
+
+  // Outer pitch border
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 10;
+  ctx.strokeRect(24, 24, c.width - 48, c.height - 48);
+
+  // Midline
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(24, c.height / 2);
+  ctx.lineTo(c.width - 24, c.height / 2);
+  ctx.stroke();
+
+  // Center Circle
+  ctx.beginPath();
+  ctx.arc(c.width / 2, c.height / 2, 165, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Blue Half Accent (Top of canvas = -Z)
+  ctx.strokeStyle = '#0ea5e9';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(c.width / 2 - 220, 24, 440, 190);
+
+  // Orange Half Accent (Bottom of canvas = +Z)
+  ctx.strokeStyle = '#f97316';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(c.width / 2 - 220, c.height - 214, 440, 190);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 8;
+  return tex;
+}
+
+// Pitch Floor
+const floorGeo = new THREE.PlaneGeometry(ARENA.WIDTH, ARENA.LENGTH);
+const floorMat = new THREE.MeshStandardMaterial({
+  map: createPitchTexture(),
+  roughness: 0.45,
+  metalness: 0.2
+});
+const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+floorMesh.rotation.x = -Math.PI / 2;
+floorMesh.receiveShadow = true;
+scene.add(floorMesh);
+
+// Translucent Energy Cage Walls & Ceiling
+function buildArenaCage() {
+  const cageGroup = new THREE.Group();
+  const halfW = ARENA.WIDTH / 2;
+  const halfL = ARENA.LENGTH / 2;
+  const h = ARENA.HEIGHT;
+  const gw = ARENA.GOAL_WIDTH / 2;
+  const gh = ARENA.GOAL_HEIGHT;
+  const gd = ARENA.GOAL_DEPTH;
+
+  const wallMat = new THREE.MeshBasicMaterial({
+    color: 0x38bdf8,
+    transparent: true,
+    opacity: 0.06,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+
+  const lineMatBlue = new THREE.LineBasicMaterial({ color: 0x0ea5e9, transparent: true, opacity: 0.45 });
+  const lineMatOrange = new THREE.LineBasicMaterial({ color: 0xf97316, transparent: true, opacity: 0.45 });
+  const lineMatNeutral = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.25 });
+
+  // Side walls (Left & Right)
+  [-halfW, halfW].forEach((xPos) => {
+    const sideGeo = new THREE.PlaneGeometry(ARENA.LENGTH, h);
+    const sideMesh = new THREE.Mesh(sideGeo, wallMat);
+    sideMesh.position.set(xPos, h / 2, 0);
+    sideMesh.rotation.y = Math.PI / 2;
+    cageGroup.add(sideMesh);
+
+    const edges = new THREE.EdgesGeometry(sideGeo);
+    const line = new THREE.LineSegments(edges, lineMatNeutral);
+    line.position.copy(sideMesh.position);
+    line.rotation.copy(sideMesh.rotation);
+    cageGroup.add(line);
+  });
+
+  // Ceiling
+  const ceilGeo = new THREE.PlaneGeometry(ARENA.WIDTH, ARENA.LENGTH);
+  const ceilMesh = new THREE.Mesh(ceilGeo, wallMat);
+  ceilMesh.position.set(0, h, 0);
+  ceilMesh.rotation.x = Math.PI / 2;
+  cageGroup.add(ceilMesh);
+
+  // Build Recessed Goals (Blue at -halfL, Orange at +halfL)
+  function createGoalStructure(isBlue) {
+    const zSign = isBlue ? -1 : 1;
+    const zBase = zSign * halfL;
+    const colorHex = isBlue ? 0x0ea5e9 : 0xf97316;
+    const lineMat = isBlue ? lineMatBlue : lineMatOrange;
+
+    const goalGroup = new THREE.Group();
+
+    // Glowing Goal Frame Posts
+    const frameMat = new THREE.MeshBasicMaterial({ color: colorHex });
+    const postGeo = new THREE.BoxGeometry(0.7, gh, 0.7);
+    const leftPost = new THREE.Mesh(postGeo, frameMat);
+    leftPost.position.set(-gw, gh / 2, zBase);
+    const rightPost = new THREE.Mesh(postGeo, frameMat);
+    rightPost.position.set(gw, gh / 2, zBase);
+    const crossbar = new THREE.Mesh(new THREE.BoxGeometry(ARENA.GOAL_WIDTH + 0.7, 0.7, 0.7), frameMat);
+    crossbar.position.set(0, gh, zBase);
+    goalGroup.add(leftPost, rightPost, crossbar);
+
+    // Goal Box Enclosure
+    const boxGeo = new THREE.BoxGeometry(ARENA.GOAL_WIDTH, gh, gd);
+    const boxMat = new THREE.MeshBasicMaterial({
+      color: colorHex,
+      transparent: true,
+      opacity: 0.14,
+      side: THREE.BackSide,
+      depthWrite: false
+    });
+    const boxMesh = new THREE.Mesh(boxGeo, boxMat);
+    boxMesh.position.set(0, gh / 2, zBase + zSign * (gd / 2));
+    goalGroup.add(boxMesh);
+
+    const boxEdges = new THREE.EdgesGeometry(boxGeo);
+    const boxWire = new THREE.LineSegments(boxEdges, lineMat);
+    boxWire.position.copy(boxMesh.position);
+    goalGroup.add(boxWire);
+
+    // Backwall panels surrounding the goal opening
+    const sidePanelW = halfW - gw;
+    [-1, 1].forEach((s) => {
+      const pGeo = new THREE.PlaneGeometry(sidePanelW, h);
+      const pMesh = new THREE.Mesh(pGeo, wallMat);
+      pMesh.position.set(s * (gw + sidePanelW / 2), h / 2, zBase);
+      goalGroup.add(pMesh);
+
+      const pEdges = new THREE.LineSegments(new THREE.EdgesGeometry(pGeo), lineMat);
+      pEdges.position.copy(pMesh.position);
+      goalGroup.add(pEdges);
+    });
+
+    // Top panel above goal
+    const topH = h - gh;
+    const topGeo = new THREE.PlaneGeometry(ARENA.GOAL_WIDTH, topH);
+    const topMesh = new THREE.Mesh(topGeo, wallMat);
+    topMesh.position.set(0, gh + topH / 2, zBase);
+    goalGroup.add(topMesh);
+
+    const topEdges = new THREE.LineSegments(new THREE.EdgesGeometry(topGeo), lineMat);
+    topEdges.position.copy(topMesh.position);
+    goalGroup.add(topEdges);
+
+    return goalGroup;
+  }
+
+  cageGroup.add(createGoalStructure(true));
+  cageGroup.add(createGoalStructure(false));
+
+  // Neon Perimeter Ribbon along floor walls
+  const ribGeo = new THREE.BoxGeometry(ARENA.WIDTH + 0.4, 0.4, ARENA.LENGTH + 0.4);
+  const ribEdges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(ribGeo),
+    new THREE.LineBasicMaterial({ color: 0x38bdf8, opacity: 0.8, transparent: true })
+  );
+  ribEdges.position.y = 0.2;
+  cageGroup.add(ribEdges);
+
+  scene.add(cageGroup);
+}
+buildArenaCage();
+
+// ----------------------------------------------------------------------------
+// 6. BOOST PADS MESHES
+// ----------------------------------------------------------------------------
+const boostPadMeshes = [];
+state.boostPads.forEach((pad) => {
+  const group = new THREE.Group();
+  group.position.set(pad.x, 0.1, pad.z);
+
+  const baseGeo = new THREE.CylinderGeometry(pad.big ? 2.1 : 1.3, pad.big ? 2.4 : 1.5, 0.2, 20);
+  const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.7, roughness: 0.3 });
+  const base = new THREE.Mesh(baseGeo, baseMat);
+  group.add(base);
+
+  const orbGeo = pad.big
+    ? new THREE.OctahedronGeometry(1.15, 1)
+    : new THREE.CylinderGeometry(0.85, 0.85, 0.35, 16);
+  const orbMat = new THREE.MeshStandardMaterial({
+    color: 0xf59e0b,
+    emissive: 0xf97316,
+    emissiveIntensity: 0.85,
+    roughness: 0.2
+  });
+  const orb = new THREE.Mesh(orbGeo, orbMat);
+  orb.position.y = pad.big ? 1.4 : 0.45;
+  group.add(orb);
+
+  scene.add(group);
+  boostPadMeshes.push({ pad, group, orb });
+});
+
+// ----------------------------------------------------------------------------
+// 7. OVERSIZED ROCKET BALL + GROUND INDICATOR RING
+// ----------------------------------------------------------------------------
+const ballGroup = new THREE.Group();
+const ballGeo = new THREE.IcosahedronGeometry(ARENA.BALL_RADIUS, 2);
+const ballMat = new THREE.MeshStandardMaterial({
+  color: 0xe2e8f0,
+  metalness: 0.65,
+  roughness: 0.25,
+  emissive: 0x1e293b,
+  emissiveIntensity: 0.4
+});
+const ballMesh = new THREE.Mesh(ballGeo, ballMat);
+ballMesh.castShadow = true;
+ballGroup.add(ballMesh);
+
+// Glowing wireframe seams on the ball so spin is super visible
+const ballWire = new THREE.LineSegments(
+  new THREE.WireframeGeometry(ballGeo),
+  new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.55 })
+);
+ballWire.scale.setScalar(1.01);
+ballGroup.add(ballWire);
+scene.add(ballGroup);
+
+// Ball Ground Shadow & Target Ring (helps gauge aerial ball height)
+const ballRingGeo = new THREE.RingGeometry(ARENA.BALL_RADIUS * 0.75, ARENA.BALL_RADIUS * 1.15, 32);
+const ballRingMat = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  side: THREE.DoubleSide,
+  transparent: true,
+  opacity: 0.55
+});
+const ballGroundRing = new THREE.Mesh(ballRingGeo, ballRingMat);
+ballGroundRing.rotation.x = -Math.PI / 2;
+ballGroundRing.position.y = 0.06;
+scene.add(ballGroundRing);
+
+// ----------------------------------------------------------------------------
+// 8. 3D ROCKET CAR BUILDER (Sleek Octane-inspired Battle-Car)
+// ----------------------------------------------------------------------------
+function buildCarMesh(team) {
+  const isBlue = team === 'blue';
+  const primaryColor = isBlue ? 0x0284c7 : 0xea580c;
+  const accentColor = isBlue ? 0x38bdf8 : 0xfbbf24;
+
+  const root = new THREE.Group();
+  const bodyPivot = new THREE.Group(); // Used for flip pitch/roll animations
+  root.add(bodyPivot);
+
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: primaryColor,
+    metalness: 0.55,
+    roughness: 0.25
+  });
+  const trimMat = new THREE.MeshStandardMaterial({
+    color: 0x0f172a,
+    metalness: 0.7,
+    roughness: 0.3
+  });
+  const glowMat = new THREE.MeshBasicMaterial({ color: accentColor });
+
+  // Lower Chassis
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.65, 4.3), bodyMat);
+  chassis.position.y = 0.55;
+  chassis.castShadow = true;
+  bodyPivot.add(chassis);
+
+  // Sloped Hood
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.45, 1.8), bodyMat);
+  hood.position.set(0, 0.85, 1.05);
+  hood.rotation.x = 0.14;
+  hood.castShadow = true;
+  bodyPivot.add(hood);
+
+  // Cabin / Cockpit
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.65, 1.9), trimMat);
+  cabin.position.set(0, 1.12, -0.25);
+  cabin.castShadow = true;
+  bodyPivot.add(cabin);
+
+  // Neon Roof & Side Strips
+  const roofStrip = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 1.5), glowMat);
+  roofStrip.position.set(0, 1.46, -0.25);
+  bodyPivot.add(roofStrip);
+
+  // Rear Spoiler Wing
+  const wingStrutL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.55, 0.3), trimMat);
+  wingStrutL.position.set(-0.75, 1.15, -1.85);
+  const wingStrutR = wingStrutL.clone();
+  wingStrutR.position.x = 0.75;
+  const wingBlade = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.12, 0.55), glowMat);
+  wingBlade.position.set(0, 1.42, -1.9);
+  wingBlade.rotation.x = -0.15;
+  bodyPivot.add(wingStrutL, wingStrutR, wingBlade);
+
+  // Dual Rocket Thrusters at Rear
+  const thrusterGeo = new THREE.CylinderGeometry(0.24, 0.3, 0.45, 12);
+  thrusterGeo.rotateX(Math.PI / 2);
+  const thrusterL = new THREE.Mesh(thrusterGeo, trimMat);
+  thrusterL.position.set(-0.55, 0.65, -2.2);
+  const thrusterR = thrusterL.clone();
+  thrusterR.position.x = 0.55;
+  bodyPivot.add(thrusterL, thrusterR);
+
+  // Rocket Flame Cones (Scaled dynamically when boosting)
+  const flameGeo = new THREE.ConeGeometry(0.28, 1.8, 10);
+  flameGeo.rotateX(-Math.PI / 2);
+  const flameMat = new THREE.MeshBasicMaterial({
+    color: 0xf97316,
+    transparent: true,
+    opacity: 0.9
+  });
+  const flameL = new THREE.Mesh(flameGeo, flameMat);
+  flameL.position.set(-0.55, 0.65, -3.1);
+  flameL.visible = false;
+  const flameR = flameL.clone();
+  flameR.position.x = 0.55;
+  bodyPivot.add(flameL, flameR);
+
+  // 4 Wheels
+  const wheelGeo = new THREE.CylinderGeometry(0.52, 0.52, 0.42, 16);
+  wheelGeo.rotateZ(Math.PI / 2);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.7 });
+  const rimMat = glowMat;
+
+  const wheelPositions = [
+    [-1.25, 0.52,  1.35],
+    [ 1.25, 0.52,  1.35],
+    [-1.25, 0.52, -1.35],
+    [ 1.25, 0.52, -1.35]
+  ];
+  const wheels = [];
+  wheelPositions.forEach(([wx, wy, wz]) => {
+    const w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.position.set(wx, wy, wz);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.44, 12).rotateZ(Math.PI / 2), rimMat);
+    w.add(rim);
+    root.add(w);
+    wheels.push(w);
+  });
+
+  return { root, bodyPivot, flameL, flameR, wheels };
+}
+
+const blueCarVisual = buildCarMesh('blue');
+const orangeCarVisual = buildCarMesh('orange');
+scene.add(blueCarVisual.root);
+scene.add(orangeCarVisual.root);
+
+// ----------------------------------------------------------------------------
+// 9. PARTICLE SYSTEM (Boost Trails & Goal Explosions)
+// ----------------------------------------------------------------------------
+const particles = [];
+const particleGeo = new THREE.SphereGeometry(0.32, 6, 6);
+
+function spawnParticle(pos, vel, colorHex, life = 0.45, scale = 1.0) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: colorHex,
+    transparent: true,
+    opacity: 0.9
+  });
+  const mesh = new THREE.Mesh(particleGeo, mat);
+  mesh.position.copy(pos);
+  mesh.scale.setScalar(scale);
+  scene.add(mesh);
+  particles.push({ mesh, vel, life, maxLife: life, baseScale: scale });
+}
+
+function spawnGoalExplosion(pos, isBlueGoalScored) {
+  // Note: If ball enters Orange goal (+Z), Blue scored!
+  const colors = isBlueGoalScored
+    ? [0x0ea5e9, 0x38bdf8, 0xffffff, 0x60a5fa]
+    : [0xf97316, 0xfbbf24, 0xffffff, 0xfb923c];
+
+  for (let i = 0; i < 65; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.random() * Math.PI;
+    const speed = 12 + Math.random() * 34;
+    const vel = new THREE.Vector3(
+      Math.sin(phi) * Math.cos(theta) * speed,
+      Math.abs(Math.cos(phi)) * speed * 0.85 + 4,
+      Math.sin(phi) * Math.sin(theta) * speed
+    );
+    const col = colors[i % colors.length];
+    spawnParticle(pos, vel, col, 0.9 + Math.random() * 0.6, 1.4 + Math.random() * 1.4);
+  }
+}
+
+function spawnPinchSparks(pos, direction) {
+  const sparkColors = [0xffffff, 0xfbbf24, 0x38bdf8, 0xf97316];
+  for (let i = 0; i < 32; i++) {
+    const spread = new THREE.Vector3(
+      (Math.random() - 0.5) * 28,
+      (Math.random() - 0.2) * 24,
+      (Math.random() - 0.5) * 28
+    );
+    const vel = direction.clone().multiplyScalar(14 + Math.random() * 20).add(spread);
+    spawnParticle(pos, vel, sparkColors[i % sparkColors.length], 0.35 + Math.random() * 0.25, 0.85);
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) {
+      scene.remove(p.mesh);
+      p.mesh.material.dispose();
+      particles.splice(i, 1);
+      continue;
+    }
+    p.mesh.position.addScaledVector(p.vel, dt);
+    p.vel.multiplyScalar(Math.pow(0.25, dt));
+    const ratio = p.life / p.maxLife;
+    p.mesh.material.opacity = ratio;
+    p.mesh.scale.setScalar(p.baseScale * ratio);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// 10. PEERJS MULTIPLAYER & DETERMINISTIC PUBLIC MATCHMAKING + AI FALLBACK
+// ----------------------------------------------------------------------------
+let peer = null;
+let activeConn = null;
+let searchTimerInterval = null;
+let netBroadcastTimer = 0;
+
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  const borderCol = type === 'warn' ? 'border-amber-400/60 text-amber-200'
+                  : type === 'success' ? 'border-emerald-400/60 text-emerald-200'
+                  : 'border-sky-400/60 text-sky-200';
+  el.className = `px-4 py-2 rounded-xl bg-slate-950/90 border ${borderCol} text-xs sm:text-sm font-semibold shadow-xl backdrop-blur-md transition-all duration-300`;
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(-8px)';
+    setTimeout(() => el.remove(), 300);
+  }, 3600);
+}
+
+function cleanupNetwork() {
+  if (searchTimerInterval) {
+    clearInterval(searchTimerInterval);
+    searchTimerInterval = null;
+  }
+  if (activeConn) {
+    try { activeConn.close(); } catch (e) {}
+    activeConn = null;
+  }
+  if (peer) {
+    try { peer.destroy(); } catch (e) {}
+    peer = null;
+  }
+}
+
+function setupConnectionHandlers(conn, isHost) {
+  activeConn = conn;
+  state.role = isHost ? 'HOST' : 'GUEST';
+  state.opponentIsBot = false;
+
+  conn.on('open', () => {
+    if (searchTimerInterval) {
+      clearInterval(searchTimerInterval);
+      searchTimerInterval = null;
+    }
+    showToast('Human opponent connected! Starting P2P Match!', 'success');
+    startMatch({
+      matchType: 'P2P',
+      role: isHost ? 'HOST' : 'GUEST',
+      opponentIsBot: false
+    });
+  });
+
+  conn.on('data', (data) => {
+    if (!data || typeof data !== 'object') return;
+
+    if (state.role === 'HOST') {
+      // Host receives Guest's car transform/state (including 3D aerial quaternion)
+      if (data.type === 'GUEST_STATE') {
+        const rc = state.remoteCar;
+        rc.targetPos.set(data.px, data.py, data.pz);
+        rc.vel.set(data.vx, data.vy, data.vz);
+        rc.targetYaw = data.yaw;
+        if (data.qx !== undefined) {
+          rc.targetQuat.set(data.qx, data.qy, data.qz, data.qw).normalize();
+        } else {
+          rc.targetQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), data.yaw);
+        }
+        rc.isBoosting = !!data.boost;
+        rc.flipTimer = data.flip || 0;
+      }
+    } else {
+      // Guest receives authoritative world state from Host
+      if (data.type === 'WORLD_STATE') {
+        const rc = state.remoteCar;
+        rc.targetPos.set(data.hx, data.hy, data.hz);
+        rc.vel.set(data.hvx, data.hvy, data.hvz);
+        rc.targetYaw = data.hyaw;
+        if (data.hqx !== undefined) {
+          rc.targetQuat.set(data.hqx, data.hqy, data.hqz, data.hqw).normalize();
+        } else {
+          rc.targetQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), data.hyaw);
+        }
+        rc.isBoosting = !!data.hboost;
+        rc.flipTimer = data.hflip || 0;
+
+        state.ball.targetPos.set(data.bx, data.by, data.bz);
+        state.ball.targetVel.set(data.bvx, data.bvy, data.bvz);
+
+        state.scoreBlue = data.sb;
+        state.scoreOrange = data.so;
+        state.timeRemaining = data.t;
+        state.overtime = !!data.ot;
+
+        // Sync boost pad active states
+        if (Array.isArray(data.pads)) {
+          for (let i = 0; i < state.boostPads.length; i++) {
+            state.boostPads[i].active = !!data.pads[i];
+          }
+        }
+
+        // Sync match phase transitions
+        if (data.mode && data.mode !== state.mode) {
+          if (data.mode === 'COUNTDOWN') {
+            resetKickoffPositions(false);
+            state.mode = 'COUNTDOWN';
+            state.countdownTimer = 3.0;
+          } else if (data.mode === 'PLAYING') {
+            state.mode = 'PLAYING';
+            hideBanner();
+          } else if (data.mode === 'GOAL_CELEBRATION') {
+            state.mode = 'GOAL_CELEBRATION';
+            sfx.playGoalExplosion();
+            spawnGoalExplosion(state.ball.pos, data.lastScorer === 'blue');
+            showBanner(
+              data.lastScorer === 'blue' ? 'BLUE SCORES!' : 'ORANGE SCORES!',
+              'GOAL EXPLOSION!',
+              data.lastScorer === 'blue' ? 'text-sky-400' : 'text-orange-400'
+            );
+          } else if (data.mode === 'GAMEOVER') {
+            endMatch();
+          }
+        }
+        updateScoreboardHUD();
+      }
+    }
+  });
+
+  const handleDisconnect = () => {
+    if (state.mode === 'PLAYING' || state.mode === 'COUNTDOWN' || state.mode === 'GOAL_CELEBRATION') {
+      // Seamless mid-match fallback to AI Bot so the player finishes the match!
+      state.opponentIsBot = true;
+      state.role = 'HOST';
+      // Ensure local car is Blue and remote car is Orange if we were Guest
+      updateConnectionBadge();
+      showToast('Opponent disconnected — AI Bot took over!', 'warn');
+    }
+  };
+
+  conn.on('close', handleDisconnect);
+  conn.on('error', handleDisconnect);
+}
+
+/**
+ * Deterministic Public Matchmaking via PeerJS Lobby Slots:
+ * Scans rl-p2p-arena-lobby-01..05. Connects as Guest if an open Host is found;
+ * otherwise claims the first free slot as Host and waits 6 seconds before
+ * seamlessly falling back to an AI Bot match.
+ */
+async function startRandomMatchmaking() {
+  cleanupNetwork();
+  if (typeof Peer === 'undefined') {
+    showToast('PeerJS unavailable — Starting AI Match!', 'warn');
+    startMatch({ matchType: 'AI', role: 'HOST', opponentIsBot: true });
+    return;
+  }
+
+  switchMenuView('menu-searching-view');
+  let secondsLeft = 6;
+  document.getElementById('search-countdown-num').textContent = secondsLeft;
+  document.getElementById('search-sec-text').textContent = `${secondsLeft}s`;
+  document.getElementById('search-status-title').textContent = 'SEARCHING FOR ONLINE PLAYERS...';
+
+  // Create an ephemeral peer first to probe existing lobby hosts
+  const probePeer = new Peer();
+  peer = probePeer;
+
+  probePeer.on('open', async () => {
+    let joinedExisting = false;
+
+    for (const slotId of LOBBY_SLOTS) {
+      if (state.mode !== 'SEARCHING' && document.getElementById('menu-searching-view').classList.contains('hidden')) {
+        return; // User cancelled
+      }
+      const connected = await tryConnectToSlot(probePeer, slotId, 750);
+      if (connected) {
+        joinedExisting = true;
+        break;
+      }
+    }
+
+    if (joinedExisting) return;
+
+    // No open hosts found -> Destroy probePeer and claim the first available Lobby Slot as Host
+    try { probePeer.destroy(); } catch (e) {}
+    claimLobbySlotAsHost(0, secondsLeft);
+  });
+
+  probePeer.on('error', () => {
+    // Fallback immediately if PeerJS cloud signaling is unreachable
+    fallbackToAIFromSearch();
+  });
+}
+
+function tryConnectToSlot(localPeer, targetId, timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const conn = localPeer.connect(targetId, { reliable: false });
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        try { conn.close(); } catch (e) {}
+        resolve(false);
+      }
+    }, timeoutMs);
+
+    conn.on('open', () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        setupConnectionHandlers(conn, false); // Join as GUEST (Orange)
+        resolve(true);
+      }
+    });
+
+    conn.on('error', () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(false);
+      }
+    });
+  });
+}
+
+function claimLobbySlotAsHost(slotIndex, secondsLeft) {
+  if (slotIndex >= LOBBY_SLOTS.length) {
+    fallbackToAIFromSearch();
+    return;
+  }
+
+  const slotId = LOBBY_SLOTS[slotIndex];
+  const hostPeer = new Peer(slotId);
+  peer = hostPeer;
+
+  hostPeer.on('open', () => {
+    document.getElementById('search-status-title').textContent = `HOSTING LOBBY (${slotIndex + 1}/5)...`;
+
+    hostPeer.on('connection', (conn) => {
+      setupConnectionHandlers(conn, true); // Host (Blue)
+    });
+
+    // Start countdown to AI fallback
+    searchTimerInterval = setInterval(() => {
+      secondsLeft--;
+      document.getElementById('search-countdown-num').textContent = Math.max(0, secondsLeft);
+      document.getElementById('search-sec-text').textContent = `${Math.max(0, secondsLeft)}s`;
+
+      if (secondsLeft <= 0) {
+        clearInterval(searchTimerInterval);
+        searchTimerInterval = null;
+        fallbackToAIFromSearch();
+      }
+    }, 1000);
+  });
+
+  hostPeer.on('error', (err) => {
+    // ID taken race condition -> try next slot
+    if (err.type === 'unavailable-id') {
+      try { hostPeer.destroy(); } catch (e) {}
+      claimLobbySlotAsHost(slotIndex + 1, secondsLeft);
+    } else {
+      fallbackToAIFromSearch();
+    }
+  });
+}
+
+function fallbackToAIFromSearch() {
+  cleanupNetwork();
+  showToast('No players online — Matched vs AI Bot!', 'warn');
+  startMatch({
+    matchType: 'AI',
+    role: 'HOST',
+    opponentIsBot: true
+  });
+}
+
+// Private Room Hosting & Joining
+function hostPrivateRoom() {
+  cleanupNetwork();
+  if (typeof Peer === 'undefined') {
+    showToast('PeerJS library not loaded.', 'warn');
+    return;
+  }
+  const hostBox = document.getElementById('private-host-box');
+  const codeEl = document.getElementById('private-room-code');
+  hostBox.classList.remove('hidden');
+  codeEl.textContent = 'Connecting to PeerJS...';
+
+  const shortId = 'rl-' + Math.random().toString(36).substring(2, 8);
+  peer = new Peer(shortId);
+
+  peer.on('open', (id) => {
+    codeEl.textContent = id;
+  });
+
+  peer.on('connection', (conn) => {
+    setupConnectionHandlers(conn, true);
+  });
+
+  peer.on('error', (err) => {
+    codeEl.textContent = 'Error: ' + err.type;
+  });
+}
+
+function joinPrivateRoom(roomId) {
+  const cleanId = roomId.trim();
+  if (!cleanId) {
+    showToast('Please enter a valid Room ID.', 'warn');
+    return;
+  }
+  cleanupNetwork();
+  showToast('Connecting to ' + cleanId + '...', 'info');
+  peer = new Peer();
+  peer.on('open', () => {
+    const conn = peer.connect(cleanId, { reliable: false });
+    setupConnectionHandlers(conn, false);
+  });
+  peer.on('error', (err) => {
+    showToast('Could not connect: ' + err.type, 'warn');
+  });
+}
+
+// ----------------------------------------------------------------------------
+// 11. MATCH LIFECYCLE, KICKOFF RESET & HUD HELPERS
+// ----------------------------------------------------------------------------
+let lastScorerTeam = 'blue';
+
+function switchMenuView(viewId) {
+  ['menu-main-view', 'menu-searching-view', 'menu-gameover-view'].forEach((id) => {
+    document.getElementById(id).classList.toggle('hidden', id !== viewId);
+  });
+}
+
+function showBanner(title, subtitle, colorClass = 'text-white') {
+  const banner = document.getElementById('center-banner');
+  const titleEl = document.getElementById('banner-title');
+  const subEl = document.getElementById('banner-subtitle');
+  titleEl.textContent = title;
+  titleEl.className = `font-display text-4xl sm:text-7xl font-black tracking-wider uppercase drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)] text-center ${colorClass}`;
+  subEl.textContent = subtitle;
+  banner.classList.remove('hidden');
+}
+
+function hideBanner() {
+  document.getElementById('center-banner').classList.add('hidden');
+}
+
+function updateConnectionBadge() {
+  const dot = document.getElementById('hud-conn-dot');
+  const text = document.getElementById('hud-conn-text');
+  if (state.opponentIsBot) {
+    dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+    text.textContent = `VS AI BOT (${state.aiDifficulty.toUpperCase()})`;
+  } else {
+    dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+    text.textContent = `P2P ONLINE (${state.role === 'HOST' ? 'BLUE' : 'ORANGE'})`;
+  }
+}
+
+function updateScoreboardHUD() {
+  document.getElementById('hud-score-blue').textContent = state.scoreBlue;
+  document.getElementById('hud-score-orange').textContent = state.scoreOrange;
+
+  const totalSec = Math.max(0, Math.ceil(state.timeRemaining));
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  document.getElementById('hud-timer').textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  document.getElementById('hud-overtime').classList.toggle('hidden', !state.overtime);
+}
+
+function resetKickoffPositions(resetPads = true) {
+  const isHost = state.role === 'HOST';
+  const localTeam = isHost ? 'blue' : 'orange';
+  const remoteTeam = isHost ? 'orange' : 'blue';
+
+  state.localCar = createCarState(localTeam);
+  state.remoteCar = createCarState(remoteTeam);
+
+  state.ball.pos.set(0, ARENA.BALL_RADIUS, 0);
+  state.ball.vel.set(0, 0, 0);
+  state.ball.angVel.set(0, 0, 0);
+  state.ball.targetPos.set(0, ARENA.BALL_RADIUS, 0);
+  state.ball.targetVel.set(0, 0, 0);
+
+  if (resetPads) {
+    state.boostPads.forEach((p) => {
+      p.active = true;
+      p.cooldown = 0;
+    });
+  }
+}
+
+function startMatch({ matchType, role, opponentIsBot }) {
+  sfx.init();
+  sfx.resume();
+
+  state.matchType = matchType;
+  state.role = role;
+  state.opponentIsBot = opponentIsBot;
+  state.scoreBlue = 0;
+  state.scoreOrange = 0;
+  state.timeRemaining = ARENA.MATCH_DURATION;
+  state.overtime = false;
+
+  resetKickoffPositions(true);
+
+  // Update team labels depending on whether local player is Blue (Host) or Orange (Guest)
+  if (role === 'HOST') {
+    document.getElementById('hud-blue-label').textContent = 'BLUE (YOU)';
+    document.getElementById('hud-orange-label').textContent = opponentIsBot ? 'ORANGE (BOT)' : 'ORANGE (P2)';
+  } else {
+    document.getElementById('hud-blue-label').textContent = 'BLUE (P1)';
+    document.getElementById('hud-orange-label').textContent = 'ORANGE (YOU)';
+  }
+
+  updateConnectionBadge();
+  updateScoreboardHUD();
+
+  document.getElementById('menu-overlay').classList.add('hidden');
+  document.getElementById('hud-top').classList.remove('hidden');
+  document.getElementById('hud-bottom').classList.remove('hidden');
+
+  state.mode = 'COUNTDOWN';
+  state.countdownTimer = 3.0;
+  state.lastCountdownBeep = 4;
+  showBanner('3', 'GET READY', 'text-white');
+}
+
+function endMatch() {
+  state.mode = 'GAMEOVER';
+  hideBanner();
+  sfx.updateContinuous(0, false, false);
+
+  document.getElementById('hud-top').classList.add('hidden');
+  document.getElementById('hud-bottom').classList.add('hidden');
+  document.getElementById('menu-overlay').classList.remove('hidden');
+  switchMenuView('menu-gameover-view');
+
+  document.getElementById('final-score-blue').textContent = state.scoreBlue;
+  document.getElementById('final-score-orange').textContent = state.scoreOrange;
+
+  const resultEl = document.getElementById('gameover-result');
+  if (state.scoreBlue > state.scoreOrange) {
+    resultEl.textContent = 'BLUE TEAM WINS!';
+    resultEl.className = 'font-display text-3xl sm:text-4xl font-black text-sky-400 neon-blue';
+  } else if (state.scoreOrange > state.scoreBlue) {
+    resultEl.textContent = 'ORANGE TEAM WINS!';
+    resultEl.className = 'font-display text-3xl sm:text-4xl font-black text-orange-400 neon-orange';
+  } else {
+    resultEl.textContent = 'MATCH DRAW!';
+    resultEl.className = 'font-display text-3xl sm:text-4xl font-black text-white';
+  }
+}
+
+// ----------------------------------------------------------------------------
+// 12. INTELLIGENT AI BOT CONTROLLER (Scaled for Larger Stadium & Aerials)
+// ----------------------------------------------------------------------------
+function computeAIControls(botCar, ball, dt) {
+  // Difficulty tuning parameters
+  const cfg = {
+    rookie:  { maxThrottle: 0.76, boostThresh: 999, leadTime: 0.18, jumpChance: 0.015 },
+    pro:     { maxThrottle: 0.96, boostThresh: 40,  leadTime: 0.38, jumpChance: 0.05 },
+    allstar: { maxThrottle: 1.00, boostThresh: 20,  leadTime: 0.58, jumpChance: 0.11 }
+  }[state.aiDifficulty] || { maxThrottle: 0.96, boostThresh: 40, leadTime: 0.38, jumpChance: 0.05 };
+
+  // Bot is Orange (defends +Z goal at +87, attacks Blue -Z goal at -87)
+  const ownGoalZ = botCar.team === 'orange' ? ARENA.LENGTH / 2 : -ARENA.LENGTH / 2;
+  const enemyGoalZ = botCar.team === 'orange' ? -ARENA.LENGTH / 2 : ARENA.LENGTH / 2;
+
+  // Predict ball position slightly ahead
+  const predBall = new THREE.Vector3()
+    .copy(ball.pos)
+    .addScaledVector(ball.vel, cfg.leadTime);
+
+  // Determine whether to clear/defend or line up an offensive shot
+  const ballNearOwnGoal = Math.abs(predBall.z - ownGoalZ) < 46;
+  const targetPoint = new THREE.Vector3();
+
+  if (ballNearOwnGoal) {
+    // Drive directly through ball away from own goal
+    targetPoint.copy(predBall);
+  } else {
+    // Line up behind the ball relative to enemy goal for an accurate shot
+    const ballToGoal = new THREE.Vector3(0, 0, enemyGoalZ).sub(predBall).normalize();
+    targetPoint.copy(predBall).addScaledVector(ballToGoal, -3.5);
+  }
+
+  // If low on boost and ball is far away, opportunistically grab nearest active boost pad
+  if (botCar.boost < 28 && botCar.pos.distanceTo(ball.pos) > 45) {
+    let bestPad = null;
+    let bestDist = 60;
+    for (const pad of state.boostPads) {
+      if (!pad.active) continue;
+      const d = Math.hypot(pad.x - botCar.pos.x, pad.z - botCar.pos.z);
+      if (d < bestDist) {
+        bestDist = d;
+        bestPad = pad;
+      }
+    }
+    if (bestPad) {
+      targetPoint.set(bestPad.x, 0, bestPad.z);
+    }
+  }
+
+  // Compute angle difference between car heading and targetPoint
+  const dx = targetPoint.x - botCar.pos.x;
+  const dz = targetPoint.z - botCar.pos.z;
+  const desiredYaw = Math.atan2(dx, dz);
+
+  let angleDiff = desiredYaw - botCar.yaw;
+  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+  // Mid-air pitch/yaw alignment if bot is airborne
+  if (!botCar.grounded) {
+    const pitchToBall = ball.pos.y > botCar.pos.y + 1.5 ? -0.5 : 0.2;
+    return {
+      throttle: pitchToBall,
+      steer: Math.max(-1, Math.min(1, angleDiff * 2.2)),
+      boost: botCar.boost > 15 && ball.pos.y > 4.0 && Math.abs(angleDiff) < 0.5,
+      drift: false,
+      airRollMod: false,
+      directRoll: 0
+    };
+  }
+
+  const steer = Math.max(-1, Math.min(1, angleDiff * 2.6));
+  const throttle = Math.abs(angleDiff) > 2.2 ? -0.5 : cfg.maxThrottle;
+  const boost = Math.abs(angleDiff) < 0.35 && botCar.boost > cfg.boostThresh && botCar.pos.distanceTo(targetPoint) > 16;
+  const drift = Math.abs(angleDiff) > 1.05 && botCar.vel.length() > 15;
+
+  // Jump / Dodge flip or low aerial into the ball when close and aligned
+  const distToBall = botCar.pos.distanceTo(ball.pos);
+  if (distToBall < 9.5 && ball.pos.y < 8.5 && Math.abs(angleDiff) < 0.45 && botCar.grounded) {
+    if (Math.random() < cfg.jumpChance * 10 * dt) {
+      botCar.vel.y = 15.5;
+      botCar.grounded = false;
+      botCar.jumpsRemaining = 1;
+      const fwd = new THREE.Vector3(Math.sin(botCar.yaw), 0, Math.cos(botCar.yaw));
+      botCar.vel.addScaledVector(fwd, 15.5);
+      botCar.flipTimer = 0.4;
+      botCar.flipDir.set(1, 0);
+    }
+  }
+
+  return { throttle, steer, boost, drift, airRollMod: false, directRoll: 0 };
+}
+
+// ----------------------------------------------------------------------------
+// 13. FRAME-RATE INDEPENDENT CAR, AERIAL & PINCH PHYSICS SIMULATION
+// ----------------------------------------------------------------------------
+function stepCarPhysics(car, ctrl, dt) {
+  // Boost consumption & thrust
+  car.isBoosting = ctrl.boost && car.boost > 0.5;
+  car.isDrifting = ctrl.drift && car.grounded;
+
+  if (car.isBoosting) {
+    car.boost = Math.max(0, car.boost - 28 * dt);
+  }
+
+  if (car.grounded) {
+    // Ground driving forces along horizontal heading
+    const forward = new THREE.Vector3(Math.sin(car.yaw), 0, Math.cos(car.yaw));
+    const right = new THREE.Vector3(Math.cos(car.yaw), 0, -Math.sin(car.yaw));
+
+    const accel = ctrl.throttle > 0 ? 48.0 : (ctrl.throttle < 0 ? 36.0 : 0);
+    car.vel.addScaledVector(forward, ctrl.throttle * accel * dt);
+
+    if (car.isBoosting) {
+      // Redirect momentum cleanly along the car's current facing direction + strong boost thrust
+      const horizSpeed = Math.hypot(car.vel.x, car.vel.z);
+      const alignedVel = forward.clone().multiplyScalar(horizSpeed);
+      car.vel.x = THREE.MathUtils.lerp(car.vel.x, alignedVel.x, 1 - Math.exp(-10 * dt));
+      car.vel.z = THREE.MathUtils.lerp(car.vel.z, alignedVel.z, 1 - Math.exp(-10 * dt));
+      car.vel.addScaledVector(forward, 46.0 * dt);
+    }
+
+    // Lateral grip (reduced when drifting for crisp powerslides)
+    const lateralSpeed = car.vel.dot(right);
+    const grip = car.isDrifting ? 2.5 : (car.isBoosting ? 16.0 : 12.0);
+    car.vel.addScaledVector(right, -lateralSpeed * Math.min(1, grip * dt));
+
+    // Rolling resistance
+    car.vel.x *= Math.pow(0.45, dt);
+    car.vel.z *= Math.pow(0.45, dt);
+
+    // Steering (reverses naturally when backing up)
+    const fwdSpeed = car.vel.dot(forward);
+    const speedFactor = Math.min(1, Math.abs(fwdSpeed) / 7.5);
+    const reverseSign = fwdSpeed >= -0.5 ? 1 : -1;
+    const turnRate = (car.isDrifting ? 3.35 : 2.4) * speedFactor * reverseSign;
+    car.yaw += ctrl.steer * turnRate * dt;
+
+    // Smoothly align 3D quaternion upright with ground yaw
+    const targetGroundQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), car.yaw);
+    car.quat.slerp(targetGroundQuat, 1 - Math.exp(-18 * dt));
+  } else {
+    // ------------------------------------------------------------------------
+    // FULL 3D MID-AIR AERIAL CONTROL (Pitch, Yaw, Air Roll, & 3D Vector Boost)
+    // ------------------------------------------------------------------------
+    const pitchRate = 2.85; // W = nose down (+local X), S = nose up (-local X)
+    const yawRate = 2.65;   // A = yaw left (+local Y), D = yaw right (-local Y)
+    const rollRate = 3.6;   // Hold Q or Shift + A/D = barrel air-roll around local Z
+
+    const pitchInput = ctrl.throttle;
+    let yawInput = 0;
+    let rollInput = 0;
+
+    if (ctrl.airRollMod) {
+      // Holding Shift or Q converts A/D into smooth longitudinal Air Roll
+      rollInput = -ctrl.steer;
+      if (ctrl.directRoll && ctrl.steer === 0) {
+        rollInput = -1; // Tapping Q alone rolls left
+      }
+    } else {
+      yawInput = ctrl.steer;
+    }
+
+    // Apply local-space incremental rotations to car's 3D quaternion
+    const deltaRot = new THREE.Euler(
+      pitchInput * pitchRate * dt,
+      yawInput * yawRate * dt,
+      rollInput * rollRate * dt,
+      'YXZ'
+    );
+    const deltaQuat = new THREE.Quaternion().setFromEuler(deltaRot);
+    car.quat.multiply(deltaQuat).normalize();
+
+    // Keep scalar yaw synchronized with 3D forward vector for smooth ground transition
+    const fwd3D = new THREE.Vector3(0, 0, 1).applyQuaternion(car.quat);
+    if (Math.hypot(fwd3D.x, fwd3D.z) > 0.15) {
+      car.yaw = Math.atan2(fwd3D.x, fwd3D.z);
+    }
+
+    // 3D Aerial Rocket Boost along the car's exact 3D nose direction!
+    if (car.isBoosting) {
+      // Bleed off perpendicular drift velocity so boost immediately propels in the nose's 3D direction
+      const forwardSpeed = car.vel.dot(fwd3D);
+      const perpVel = car.vel.clone().addScaledVector(fwd3D, -forwardSpeed);
+      car.vel.addScaledVector(perpVel, -(1 - Math.exp(-6.5 * dt)));
+      car.vel.addScaledVector(fwd3D, 52.0 * dt);
+    }
+
+    // Subtle aerial air-maneuver thrusters even without boost so player can micro-adjust mid-air
+    const right3D = new THREE.Vector3(1, 0, 0).applyQuaternion(car.quat);
+    car.vel.addScaledVector(fwd3D, ctrl.throttle * 7.5 * dt);
+    car.vel.addScaledVector(right3D, -ctrl.steer * 6.5 * dt);
+
+    // Gravity
+    car.vel.y += ARENA.GRAVITY * dt;
+  }
+
+  // Clamp max speed (allow supersonic aerial boost speeds up to 54)
+  const maxSpeed = car.isBoosting ? 54.0 : 35.0;
+  const totalSpeed = car.vel.length();
+  if (totalSpeed > maxSpeed) {
+    car.vel.multiplyScalar(maxSpeed / totalSpeed);
+  }
+
+  // Integrate position
+  car.pos.addScaledVector(car.vel, dt);
+
+  // Flip visual rotation timer
+  if (car.flipTimer > 0) {
+    car.flipTimer = Math.max(0, car.flipTimer - dt);
+  }
+
+  // Track recent wall/floor contact normal to assist pinch detection
+  if (car.wallContactTimer > 0) {
+    car.wallContactTimer = Math.max(0, car.wallContactTimer - dt);
+  }
+
+  // Floor collision & auto-leveling
+  if (car.pos.y <= ARENA.CAR_HALF_H) {
+    car.pos.y = ARENA.CAR_HALF_H;
+    car.vel.y = 0;
+    car.grounded = true;
+    car.jumpsRemaining = 2;
+    car.lastWallNormal.set(0, 1, 0);
+    car.wallContactTimer = 0.12;
+  } else {
+    car.grounded = false;
+  }
+
+  // Ceiling collision
+  if (car.pos.y > ARENA.HEIGHT - ARENA.CAR_HALF_H) {
+    car.pos.y = ARENA.HEIGHT - ARENA.CAR_HALF_H;
+    car.vel.y = Math.min(0, car.vel.y);
+    car.lastWallNormal.set(0, -1, 0);
+    car.wallContactTimer = 0.18;
+  }
+
+  // Arena wall collisions (allow entering goal mouth)
+  const halfW = ARENA.WIDTH / 2 - ARENA.CAR_HALF_L;
+  const halfL = ARENA.LENGTH / 2 - ARENA.CAR_HALF_L;
+  const inGoalMouth = Math.abs(car.pos.x) < (ARENA.GOAL_WIDTH / 2 - 1.2) && car.pos.y < ARENA.GOAL_HEIGHT;
+
+  if (car.pos.x < -halfW) {
+    car.pos.x = -halfW;
+    car.vel.x = Math.max(0, car.vel.x * -0.4);
+    car.lastWallNormal.set(1, 0, 0);
+    car.wallContactTimer = 0.22;
+  }
+  if (car.pos.x > halfW) {
+    car.pos.x = halfW;
+    car.vel.x = Math.min(0, car.vel.x * -0.4);
+    car.lastWallNormal.set(-1, 0, 0);
+    car.wallContactTimer = 0.22;
+  }
+
+  const zLimit = inGoalMouth ? (halfL + ARENA.GOAL_DEPTH - 1.5) : halfL;
+  if (car.pos.z < -zLimit) {
+    car.pos.z = -zLimit;
+    car.vel.z = Math.max(0, car.vel.z * -0.4);
+    car.lastWallNormal.set(0, 0, 1);
+    car.wallContactTimer = 0.22;
+  }
+  if (car.pos.z > zLimit) {
+    car.pos.z = zLimit;
+    car.vel.z = Math.min(0, car.vel.z * -0.4);
+    car.lastWallNormal.set(0, 0, -1);
+    car.wallContactTimer = 0.22;
+  }
+
+  // Boost pad pickup check
+  for (const pad of state.boostPads) {
+    if (!pad.active) continue;
+    const dx = car.pos.x - pad.x;
+    const dz = car.pos.z - pad.z;
+    const pickupRadius = pad.big ? 3.6 : 2.8;
+    if (dx * dx + dz * dz < pickupRadius * pickupRadius && car.pos.y < 4.0 && car.boost < 99.5) {
+      car.boost = Math.min(100, car.boost + pad.amount);
+      pad.active = false;
+      pad.cooldown = pad.big ? 10.0 : 5.0;
+      if (car === state.localCar) {
+        sfx.playBoostPickup();
+      }
+    }
+  }
+}
+
+function resolveCarToCarCollision(c1, c2) {
+  const diff = new THREE.Vector3().subVectors(c1.pos, c2.pos);
+  const dist = diff.length();
+  const minDist = 3.2;
+  if (dist > 0.001 && dist < minDist) {
+    const normal = diff.divideScalar(dist);
+    const overlap = minDist - dist;
+    c1.pos.addScaledVector(normal, overlap * 0.5);
+    c2.pos.addScaledVector(normal, -overlap * 0.5);
+
+    const relVel = new THREE.Vector3().subVectors(c1.vel, c2.vel);
+    const velAlongNormal = relVel.dot(normal);
+    if (velAlongNormal < 0) {
+      const impulse = -1.4 * velAlongNormal * 0.5;
+      c1.vel.addScaledVector(normal, impulse);
+      c2.vel.addScaledVector(normal, -impulse);
+    }
+  }
+}
+
+function resolveCarToBallCollision(car, ball) {
+  // Oriented 3D box-to-sphere hitbox check so angled aerials, roof hits, and corner pinches feel crisp!
+  const invQuat = car.quat.clone().invert();
+  const relBallPos = new THREE.Vector3().subVectors(ball.pos, car.pos).applyQuaternion(invQuat);
+
+  // Car's local half-extents (with generous arcade feel)
+  const halfExtents = new THREE.Vector3(1.55, 1.05, 2.45);
+  const closestLocal = new THREE.Vector3(
+    Math.max(-halfExtents.x, Math.min(halfExtents.x, relBallPos.x)),
+    Math.max(-halfExtents.y, Math.min(halfExtents.y, relBallPos.y)),
+    Math.max(-halfExtents.z, Math.min(halfExtents.z, relBallPos.z))
+  );
+
+  const localDelta = new THREE.Vector3().subVectors(relBallPos, closestLocal);
+  const dist = localDelta.length();
+  const hitRadius = ARENA.BALL_RADIUS;
+
+  if (dist < hitRadius) {
+    // Transform contact normal back into world space
+    let normal;
+    if (dist > 0.001) {
+      normal = localDelta.divideScalar(dist).applyQuaternion(car.quat).normalize();
+    } else {
+      normal = new THREE.Vector3().subVectors(ball.pos, car.pos).normalize();
+    }
+
+    const overlap = hitRadius - dist;
+    ball.pos.addScaledVector(normal, overlap);
+
+    // ------------------------------------------------------------------------
+    // WALL / FLOOR / CORNER PINCH DETECTION & COMPRESSION SQUEEZE
+    // ------------------------------------------------------------------------
+    const r = ARENA.BALL_RADIUS;
+    const halfW = ARENA.WIDTH / 2;
+    const halfL = ARENA.LENGTH / 2;
+    const pinchMargin = r + 1.35;
+
+    // Gather all arena surfaces currently compressing the ball
+    const surfaceNormals = [];
+    if (ball.pos.x <= -halfW + pinchMargin) surfaceNormals.push(new THREE.Vector3(1, 0, 0));
+    if (ball.pos.x >=  halfW - pinchMargin) surfaceNormals.push(new THREE.Vector3(-1, 0, 0));
+    if (ball.pos.z <= -halfL + pinchMargin) surfaceNormals.push(new THREE.Vector3(0, 0, 1));
+    if (ball.pos.z >=  halfL - pinchMargin) surfaceNormals.push(new THREE.Vector3(0, 0, -1));
+    if (ball.pos.y <= pinchMargin && !car.grounded) surfaceNormals.push(new THREE.Vector3(0, 1, 0)); // Aerial slam ground pinch!
+    if (ball.pos.y >= ARENA.HEIGHT - pinchMargin) surfaceNormals.push(new THREE.Vector3(0, -1, 0));
+
+    let isPinch = false;
+    const pinchSqueezeDir = new THREE.Vector3();
+
+    for (const sNorm of surfaceNormals) {
+      // Check if car is pushing the ball *into* the surface (normal opposes surface inward normal)
+      const opposition = -normal.dot(sNorm);
+      if (opposition > 0.35) {
+        isPinch = true;
+        // Tangent + inward squeeze vector shoots the ball parallel along the wall/floor away from the car
+        const tangent = new THREE.Vector3().copy(normal).addScaledVector(sNorm, opposition);
+        if (tangent.lengthSq() > 0.01) {
+          tangent.normalize();
+        } else {
+          // Direct perpendicular squeeze -> eject sideways/upward
+          tangent.set(-sNorm.z, 0.35, sNorm.x).normalize();
+        }
+        pinchSqueezeDir.add(tangent).addScaledVector(sNorm, 0.32);
+      }
+    }
+
+    const relVel = new THREE.Vector3().subVectors(ball.vel, car.vel);
+    const vn = relVel.dot(normal);
+
+    if (isPinch) {
+      pinchSqueezeDir.normalize();
+      const carSpeed = car.vel.length();
+      const flipMult = car.flipTimer > 0 ? 1.25 : 1.0;
+      // High-velocity supersonic pinch launch!
+      const pinchSpeed = Math.min(82.0, Math.max(46.0, (carSpeed * 1.45 + 28.0) * flipMult));
+      ball.vel.copy(pinchSqueezeDir).multiplyScalar(pinchSpeed);
+      ball.vel.y = Math.max(ball.vel.y, 6.5);
+
+      // Push car slightly back from the pinch compression
+      car.vel.addScaledVector(normal, -10.0);
+      ball.angVel.set(ball.vel.z * 0.45, 0, -ball.vel.x * 0.45);
+
+      if (state.pinchCooldown <= 0) {
+        state.pinchCooldown = 0.65;
+        sfx.playPinchBoom();
+        spawnPinchSparks(ball.pos, pinchSqueezeDir);
+        if (car === state.localCar) {
+          state.cameraShake = 0.75;
+          showToast('⚡ SUPERSONIC PINCH!', 'success');
+        }
+      }
+    } else if (vn < 0) {
+      // Standard aerial / ground shot impact
+      const flipBonus = car.flipTimer > 0 ? 1.45 : 1.18;
+      const impulse = -1.68 * vn * flipBonus;
+      ball.vel.addScaledVector(normal, impulse);
+      // Add upward pop so ground hits loft nicely toward goal
+      ball.vel.y += Math.max(2.2, Math.abs(vn) * 0.22);
+      // Transfer car momentum
+      ball.vel.addScaledVector(car.vel, 0.36);
+
+      // Slight car recoil
+      car.vel.addScaledVector(normal, -impulse * 0.14);
+
+      // Spin
+      ball.angVel.set(ball.vel.z * 0.25, 0, -ball.vel.x * 0.25);
+
+      const impactStrength = Math.min(1, Math.abs(vn) / 35);
+      sfx.playBallHit(impactStrength);
+      if (car === state.localCar && impactStrength > 0.45) {
+        state.cameraShake = Math.max(state.cameraShake, impactStrength * 0.45);
+      }
+    }
+  }
+}
+
+function stepBallPhysics(ball, dt) {
+  // Gravity & air drag
+  ball.vel.y += ARENA.GRAVITY * 0.70 * dt;
+  ball.vel.multiplyScalar(Math.pow(0.88, dt));
+
+  // Clamp max ball speed (high cap allows blistering pinch shots!)
+  const maxBallSpeed = 84.0;
+  if (ball.vel.length() > maxBallSpeed) {
+    ball.vel.setLength(maxBallSpeed);
+  }
+
+  ball.pos.addScaledVector(ball.vel, dt);
+
+  const r = ARENA.BALL_RADIUS;
+  const halfW = ARENA.WIDTH / 2 - r;
+  const halfL = ARENA.LENGTH / 2 - r;
+  const restitution = 0.78;
+
+  // Floor bounce
+  if (ball.pos.y < r) {
+    ball.pos.y = r;
+    if (ball.vel.y < -2.0) sfx.playBallHit(Math.min(0.6, Math.abs(ball.vel.y) / 40));
+    ball.vel.y = Math.abs(ball.vel.y) * restitution;
+    ball.vel.x *= 0.96;
+    ball.vel.z *= 0.96;
+  }
+
+  // Ceiling bounce
+  if (ball.pos.y > ARENA.HEIGHT - r) {
+    ball.pos.y = ARENA.HEIGHT - r;
+    ball.vel.y = -Math.abs(ball.vel.y) * restitution;
+  }
+
+  // Side walls
+  if (ball.pos.x < -halfW) {
+    ball.pos.x = -halfW;
+    ball.vel.x = Math.abs(ball.vel.x) * restitution;
+  }
+  if (ball.pos.x > halfW) {
+    ball.pos.x = halfW;
+    ball.vel.x = -Math.abs(ball.vel.x) * restitution;
+  }
+
+  // Check Goal Scoring vs End Walls
+  const inGoalMouthX = Math.abs(ball.pos.x) < (ARENA.GOAL_WIDTH / 2 - r * 0.35);
+  const inGoalMouthY = ball.pos.y < (ARENA.GOAL_HEIGHT - r * 0.35);
+
+  if (inGoalMouthX && inGoalMouthY) {
+    // Ball fully crossed the goal line!
+    if (ball.pos.z > ARENA.LENGTH / 2 + r * 0.5) {
+      handleGoalScored('blue'); // Blue scored on Orange's goal (+Z)
+    } else if (ball.pos.z < -ARENA.LENGTH / 2 - r * 0.5) {
+      handleGoalScored('orange'); // Orange scored on Blue's goal (-Z)
+    }
+  } else {
+    // Bounce off back wall outside goal mouth
+    if (ball.pos.z < -halfL) {
+      ball.pos.z = -halfL;
+      ball.vel.z = Math.abs(ball.vel.z) * restitution;
+    }
+    if (ball.pos.z > halfL) {
+      ball.pos.z = halfL;
+      ball.vel.z = -Math.abs(ball.vel.z) * restitution;
+    }
+  }
+}
+
+function handleGoalScored(scoringTeam) {
+  if (state.mode !== 'PLAYING') return;
+  lastScorerTeam = scoringTeam;
+
+  if (scoringTeam === 'blue') state.scoreBlue++;
+  else state.scoreOrange++;
+
+  updateScoreboardHUD();
+  sfx.playGoalExplosion();
+  spawnGoalExplosion(state.ball.pos, scoringTeam === 'blue');
+  state.cameraShake = 1.1;
+
+  // Blast cars away from the goal explosion
+  [state.localCar, state.remoteCar].forEach((c) => {
+    const push = new THREE.Vector3().subVectors(c.pos, state.ball.pos);
+    const d = Math.max(4, push.length());
+    push.normalize().multiplyScalar(Math.min(42, 420 / d));
+    push.y = 14;
+    c.vel.add(push);
+  });
+
+  if (state.overtime) {
+    // Golden Goal Sudden Death!
+    state.mode = 'GOAL_CELEBRATION';
+    state.goalPauseTimer = 2.6;
+    showBanner(
+      scoringTeam === 'blue' ? 'BLUE WINS IN OT!' : 'ORANGE WINS IN OT!',
+      'GOLDEN GOAL!',
+      scoringTeam === 'blue' ? 'text-sky-400' : 'text-orange-400'
+    );
+  } else {
+    state.mode = 'GOAL_CELEBRATION';
+    state.goalPauseTimer = 3.2;
+    showBanner(
+      scoringTeam === 'blue' ? 'BLUE SCORES!' : 'ORANGE SCORES!',
+      `${state.scoreBlue} — ${state.scoreOrange}`,
+      scoringTeam === 'blue' ? 'text-sky-400' : 'text-orange-400'
+    );
+  }
+}
+
+// ----------------------------------------------------------------------------
+// 14. VISUAL SYNC & DYNAMIC CAMERA (Ball Cam / Car Cam + Boost FOV)
+// ----------------------------------------------------------------------------
+function syncCarVisual(car, visual, dt) {
+  visual.root.position.copy(car.pos);
+  // Apply full 3D orientation quaternion (supports pitch, yaw, and barrel air-roll!)
+  visual.root.quaternion.copy(car.quat);
+
+  // Dodge Flip animation on local bodyPivot
+  if (car.flipTimer > 0) {
+    const progress = 1 - (car.flipTimer / 0.42);
+    visual.bodyPivot.rotation.x = car.flipDir.x * progress * Math.PI * 2;
+    visual.bodyPivot.rotation.z = car.flipDir.y * progress * Math.PI * 2;
+  } else {
+    visual.bodyPivot.rotation.x = THREE.MathUtils.lerp(visual.bodyPivot.rotation.x, 0, 14 * dt);
+    visual.bodyPivot.rotation.z = THREE.MathUtils.lerp(visual.bodyPivot.rotation.z, 0, 14 * dt);
+  }
+
+  // Rocket flames & boost trail particles along car's 3D backward vector
+  visual.flameL.visible = car.isBoosting;
+  visual.flameR.visible = car.isBoosting;
+  if (car.isBoosting) {
+    const flicker = 0.85 + Math.random() * 0.45;
+    visual.flameL.scale.set(1, 1, flicker);
+    visual.flameR.scale.set(1, 1, flicker);
+
+    if (Math.random() < 0.75) {
+      const backDir3D = new THREE.Vector3(0, 0, -1).applyQuaternion(car.quat);
+      const spawnPos = car.pos.clone().addScaledVector(backDir3D, 2.5);
+      spawnParticle(spawnPos, backDir3D.multiplyScalar(9), 0xf97316, 0.28, 0.95);
+    }
+  }
+
+  // Spin wheels based on speed
+  const speed = car.vel.length();
+  visual.wheels.forEach((w) => {
+    w.rotation.x += speed * dt * 1.4;
+  });
+}
+
+function updateCamera(dt) {
+  if (state.mode === 'MENU' || state.mode === 'SEARCHING') {
+    // Cinematic orbiting camera over the expanded stadium on the main menu
+    const t = performance.now() * 0.00025;
+    camera.position.set(Math.cos(t) * 68, 32, Math.sin(t) * 68);
+    camera.lookAt(0, 4, 0);
+    return;
+  }
+
+  const car = state.localCar;
+  const ball = state.ball;
+
+  // Wide pro-style camera FOV with dynamic supersonic boost expansion
+  const targetFov = car.isBoosting ? 98 : 84;
+  camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 7 * dt);
+  camera.updateProjectionMatrix();
+
+  const desiredPos = new THREE.Vector3();
+  const lookTarget = new THREE.Vector3();
+
+  if (state.ballCam) {
+    // Vector from car toward ball
+    const carToBall = new THREE.Vector3().subVectors(ball.pos, car.pos);
+    carToBall.y = 0;
+    if (carToBall.lengthSq() < 0.01) {
+      carToBall.set(Math.sin(car.yaw), 0, Math.cos(car.yaw));
+    } else {
+      carToBall.normalize();
+    }
+
+    desiredPos.copy(car.pos)
+      .addScaledVector(carToBall, -13.0)
+      .add(new THREE.Vector3(0, 5.2, 0));
+
+    lookTarget.copy(ball.pos).lerp(car.pos, 0.25);
+    lookTarget.y = Math.max(1.8, lookTarget.y);
+  } else {
+    // Car Cam (follows behind car's facing yaw)
+    const forward = new THREE.Vector3(Math.sin(car.yaw), 0, Math.cos(car.yaw));
+    desiredPos.copy(car.pos)
+      .addScaledVector(forward, -12.5)
+      .add(new THREE.Vector3(0, 5.0, 0));
+
+    lookTarget.copy(car.pos)
+      .addScaledVector(forward, 11.0)
+      .add(new THREE.Vector3(0, 2.2, 0));
+  }
+
+  // Clamp camera inside arena bounds so walls never clip view
+  desiredPos.x = Math.max(-ARENA.WIDTH / 2 + 2.5, Math.min(ARENA.WIDTH / 2 - 2.5, desiredPos.x));
+  desiredPos.z = Math.max(-ARENA.LENGTH / 2 + 2.5, Math.min(ARENA.LENGTH / 2 - 2.5, desiredPos.z));
+  desiredPos.y = Math.max(2.0, Math.min(ARENA.HEIGHT - 2.0, desiredPos.y));
+
+  camera.position.lerp(desiredPos, 1 - Math.exp(-11 * dt));
+
+  if (state.cameraShake > 0) {
+    camera.position.x += (Math.random() - 0.5) * state.cameraShake;
+    camera.position.y += (Math.random() - 0.5) * state.cameraShake;
+    state.cameraShake = Math.max(0, state.cameraShake - dt * 2.5);
+  }
+
+  camera.lookAt(lookTarget);
+}
+
+// ----------------------------------------------------------------------------
+// 15. MAIN SIMULATION & RENDER LOOP
+// ----------------------------------------------------------------------------
+let lastFrameTime = performance.now();
+
+function gameLoop(now) {
+  requestAnimationFrame(gameLoop);
+
+  const rawDt = (now - lastFrameTime) / 1000;
+  lastFrameTime = now;
+  const dt = Math.min(rawDt, 0.05); // Clamp dt to prevent tunneling on tab switch
+
+  if (state.pinchCooldown > 0) {
+    state.pinchCooldown = Math.max(0, state.pinchCooldown - dt);
+  }
+
+  // Rotate boost pad orbs
+  boostPadMeshes.forEach(({ pad, orb }) => {
+    orb.visible = pad.active;
+    if (pad.active) {
+      orb.rotation.y += 2.2 * dt;
+    }
+  });
+
+  // Update Boost Pad respawn timers (Authoritative on Host/AI)
+  if (state.role === 'HOST') {
+    for (const pad of state.boostPads) {
+      if (!pad.active) {
+        pad.cooldown -= dt;
+        if (pad.cooldown <= 0) {
+          pad.active = true;
+          pad.cooldown = 0;
+        }
+      }
+    }
+  }
+
+  // State Machine
+  if (state.mode === 'COUNTDOWN') {
+    state.countdownTimer -= dt;
+    const ceilSec = Math.ceil(state.countdownTimer);
+    if (ceilSec < state.lastCountdownBeep && ceilSec > 0) {
+      state.lastCountdownBeep = ceilSec;
+      sfx.playCountdown(false);
+      showBanner(String(ceilSec), state.overtime ? 'OVERTIME — NEXT GOAL WINS!' : 'GET READY', 'text-white');
+    }
+    if (state.countdownTimer <= 0) {
+      state.mode = 'PLAYING';
+      sfx.playCountdown(true);
+      showBanner('GO!', 'SUPERSONIC!', 'text-emerald-400');
+      setTimeout(() => {
+        if (state.mode === 'PLAYING') hideBanner();
+      }, 650);
+    }
+  } else if (state.mode === 'PLAYING' || state.mode === 'GOAL_CELEBRATION') {
+    const localCtrl = getLocalControls();
+    stepCarPhysics(state.localCar, localCtrl, dt);
+
+    // Remote Car: AI Bot vs Network Peer Interpolation
+    if (state.opponentIsBot) {
+      const aiCtrl = computeAIControls(state.remoteCar, state.ball, dt);
+      stepCarPhysics(state.remoteCar, aiCtrl, dt);
+    } else {
+      // Smoothly interpolate remote human car position & 3D aerial quaternion
+      state.remoteCar.pos.lerp(state.remoteCar.targetPos, 1 - Math.exp(-18 * dt));
+      state.remoteCar.quat.slerp(state.remoteCar.targetQuat, 1 - Math.exp(-18 * dt));
+      // Shortest-angle yaw lerp
+      let diff = state.remoteCar.targetYaw - state.remoteCar.yaw;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      state.remoteCar.yaw += diff * (1 - Math.exp(-18 * dt));
+    }
+
+    // Authoritative Physics (Host or Singleplayer AI)
+    if (state.role === 'HOST') {
+      resolveCarToCarCollision(state.localCar, state.remoteCar);
+
+      if (state.mode === 'PLAYING') {
+        resolveCarToBallCollision(state.localCar, state.ball);
+        resolveCarToBallCollision(state.remoteCar, state.ball);
+        stepBallPhysics(state.ball, dt);
+
+        // Match Clock
+        if (!state.overtime) {
+          state.timeRemaining -= dt;
+          if (state.timeRemaining <= 0) {
+            state.timeRemaining = 0;
+            if (state.scoreBlue === state.scoreOrange) {
+              // Enter Sudden-Death Overtime!
+              state.overtime = true;
+              resetKickoffPositions(true);
+              state.mode = 'COUNTDOWN';
+              state.countdownTimer = 3.0;
+              state.lastCountdownBeep = 4;
+            } else {
+              endMatch();
+            }
+          }
+        } else {
+          state.timeRemaining += dt; // Count up in Overtime
+        }
+        updateScoreboardHUD();
+      } else if (state.mode === 'GOAL_CELEBRATION') {
+        stepBallPhysics(state.ball, dt);
+        state.goalPauseTimer -= dt;
+        if (state.goalPauseTimer <= 0) {
+          if (state.overtime) {
+            endMatch();
+          } else {
+            resetKickoffPositions(true);
+            state.mode = 'COUNTDOWN';
+            state.countdownTimer = 3.0;
+            state.lastCountdownBeep = 4;
+          }
+        }
+      }
+    } else {
+      // Guest client-side prediction + smooth interpolation of authoritative ball
+      resolveCarToBallCollision(state.localCar, state.ball);
+      state.ball.pos.addScaledVector(state.ball.targetVel, dt);
+      state.ball.pos.lerp(state.ball.targetPos, 1 - Math.exp(-18 * dt));
+      state.ball.vel.copy(state.ball.targetVel);
+    }
+
+    // Network State Broadcast (~40 Hz)
+    if (!state.opponentIsBot && activeConn && activeConn.open) {
+      netBroadcastTimer += dt;
+      if (netBroadcastTimer >= 0.025) {
+        netBroadcastTimer = 0;
+        if (state.role === 'HOST') {
+          activeConn.send({
+            type: 'WORLD_STATE',
+            hx: state.localCar.pos.x, hy: state.localCar.pos.y, hz: state.localCar.pos.z,
+            hvx: state.localCar.vel.x, hvy: state.localCar.vel.y, hvz: state.localCar.vel.z,
+            hyaw: state.localCar.yaw,
+            hqx: state.localCar.quat.x, hqy: state.localCar.quat.y, hqz: state.localCar.quat.z, hqw: state.localCar.quat.w,
+            hboost: state.localCar.isBoosting ? 1 : 0, hflip: state.localCar.flipTimer,
+            bx: state.ball.pos.x, by: state.ball.pos.y, bz: state.ball.pos.z,
+            bvx: state.ball.vel.x, bvy: state.ball.vel.y, bvz: state.ball.vel.z,
+            sb: state.scoreBlue, so: state.scoreOrange,
+            t: state.timeRemaining, ot: state.overtime ? 1 : 0,
+            mode: state.mode, lastScorer: lastScorerTeam,
+            pads: state.boostPads.map((p) => (p.active ? 1 : 0))
+          });
+        } else {
+          activeConn.send({
+            type: 'GUEST_STATE',
+            px: state.localCar.pos.x, py: state.localCar.pos.y, pz: state.localCar.pos.z,
+            vx: state.localCar.vel.x, vy: state.localCar.vel.y, vz: state.localCar.vel.z,
+            yaw: state.localCar.yaw,
+            qx: state.localCar.quat.x, qy: state.localCar.quat.y, qz: state.localCar.quat.z, qw: state.localCar.quat.w,
+            boost: state.localCar.isBoosting ? 1 : 0, flip: state.localCar.flipTimer
+          });
+        }
+      }
+    }
+
+    // Update Boost Gauge HUD & Engine Audio
+    const boostPct = Math.round(state.localCar.boost);
+    document.getElementById('hud-boost-val').textContent = boostPct;
+    const circumference = 251.2;
+    document.getElementById('boost-ring').style.strokeDashoffset = circumference * (1 - boostPct / 100);
+
+    const speedRatio = Math.hypot(state.localCar.vel.x, state.localCar.vel.z) / 35;
+    sfx.updateContinuous(speedRatio, state.localCar.isBoosting, state.mode === 'PLAYING');
+  } else {
+    sfx.updateContinuous(0, false, false);
+  }
+
+  // Sync 3D Meshes
+  const blueCar = state.localCar.team === 'blue' ? state.localCar : state.remoteCar;
+  const orangeCar = state.localCar.team === 'orange' ? state.localCar : state.remoteCar;
+  syncCarVisual(blueCar, blueCarVisual, dt);
+  syncCarVisual(orangeCar, orangeCarVisual, dt);
+
+  // Sync Ball Mesh & Ground Indicator Ring
+  ballGroup.position.copy(state.ball.pos);
+  ballGroup.rotation.x += state.ball.vel.z * dt * 0.35;
+  ballGroup.rotation.z -= state.ball.vel.x * dt * 0.35;
+
+  // Ball speed glow
+  const ballSpeed = state.ball.vel.length();
+  ballMat.emissive.setHex(ballSpeed > 34 ? 0xf97316 : 0x1e293b);
+  ballMat.emissiveIntensity = ballSpeed > 34 ? 0.85 : 0.35;
+
+  ballGroundRing.position.x = state.ball.pos.x;
+  ballGroundRing.position.z = state.ball.pos.z;
+  const heightScale = Math.max(0.45, 1 - (state.ball.pos.y - ARENA.BALL_RADIUS) / 28);
+  ballGroundRing.scale.setScalar(heightScale);
+
+  updateParticles(dt);
+  updateCamera(dt);
+  renderer.render(scene, camera);
+}
+
+// ----------------------------------------------------------------------------
+// 16. UI BUTTON EVENT LISTENERS
+// ----------------------------------------------------------------------------
+document.getElementById('btn-play-online').addEventListener('click', () => {
+  sfx.init();
+  sfx.resume();
+  startRandomMatchmaking();
+});
+
+document.getElementById('btn-cancel-search').addEventListener('click', () => {
+  cleanupNetwork();
+  switchMenuView('menu-main-view');
+});
+
+document.getElementById('btn-play-ai').addEventListener('click', () => {
+  cleanupNetwork();
+  startMatch({ matchType: 'AI', role: 'HOST', opponentIsBot: true });
+});
+
+// Difficulty selector buttons
+document.querySelectorAll('.diff-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    state.aiDifficulty = btn.dataset.diff;
+    document.querySelectorAll('.diff-btn').forEach((b) => {
+      b.className = 'diff-btn px-2.5 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition cursor-pointer';
+    });
+    btn.className = 'diff-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-orange-500 text-white transition cursor-pointer';
+  });
+});
+
+document.getElementById('btn-host-private').addEventListener('click', () => {
+  sfx.init();
+  sfx.resume();
+  hostPrivateRoom();
+});
+
+document.getElementById('btn-join-private').addEventListener('click', () => {
+  sfx.init();
+  sfx.resume();
+  joinPrivateRoom(document.getElementById('input-join-id').value);
+});
+
+document.getElementById('btn-copy-code').addEventListener('click', () => {
+  const code = document.getElementById('private-room-code').textContent;
+  const tempInput = document.createElement('input');
+  tempInput.value = code;
+  document.body.appendChild(tempInput);
+  tempInput.select();
+  document.execCommand('copy');
+  document.body.removeChild(tempInput);
+  showToast('Room ID copied to clipboard!', 'success');
+});
+
+document.getElementById('btn-cam-toggle').addEventListener('click', toggleBallCam);
+
+document.getElementById('btn-mute-toggle').addEventListener('click', (e) => {
+  sfx.init();
+  sfx.setMuted(!sfx.muted);
+  e.target.textContent = sfx.muted ? '🔇 MUTED' : '🔊 SFX';
+});
+
+document.getElementById('btn-leave-match').addEventListener('click', () => {
+  cleanupNetwork();
+  state.mode = 'MENU';
+  hideBanner();
+  document.getElementById('hud-top').classList.add('hidden');
+  document.getElementById('hud-bottom').classList.add('hidden');
+  document.getElementById('menu-overlay').classList.remove('hidden');
+  switchMenuView('menu-main-view');
+});
+
+document.getElementById('btn-rematch').addEventListener('click', () => {
+  if (!state.opponentIsBot && activeConn && activeConn.open) {
+    startMatch({ matchType: state.matchType, role: state.role, opponentIsBot: false });
+  } else {
+    startMatch({ matchType: 'AI', role: 'HOST', opponentIsBot: true });
+  }
+});
+
+document.getElementById('btn-back-menu').addEventListener('click', () => {
+  cleanupNetwork();
+  state.mode = 'MENU';
+  switchMenuView('menu-main-view');
+});
+
+// Start animation loop on window load
+window.onload = function () {
+  lastFrameTime = performance.now();
+  requestAnimationFrame(gameLoop);
+};
+</script>
+</body>
+</html>
